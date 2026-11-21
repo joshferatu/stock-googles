@@ -1,0 +1,144 @@
+# AGENTS.md
+
+Guidance for AI coding agents working in this repository. Read it before changing code.
+
+## What this project is
+
+**Stock Googles** is a single-tenant market dashboard deployed on Vercel. It lets a small group of users search global listings, follow companies, and see a personalised market overview.
+
+Hard constraints:
+
+- **No database.** All user state (favourites, settings, cached quotes) lives in the browser (`localStorage`).
+- **Keyless public APIs.** Yahoo Finance is primary; CNBC is the quote fallback; open.er-api.com provides FX rates.
+- **Thin server.** Next.js route handlers only proxy and normalise upstream data. There is no server-side user state or session store.
+- **Vercel-first.** No cron jobs, background workers, message queues or extra services.
+
+## Quick commands
+
+```bash
+npm run dev         # local dev server, http://localhost:3000
+npm run build       # production build
+npm run start       # serve the production build
+npm run typecheck   # tsc --noEmit
+npm run lint        # eslint .
+npm test            # Vitest unit tests
+npm run test:e2e    # Playwright (builds, starts :3100, mocks market APIs)
+npm run icons       # regenerate PWA PNGs from public/icons/*.svg
+```
+
+Never run `next dev` and `next start` at the same time: they share `.next` and corrupt each other's chunks. Stop one before starting the other.
+
+## Environment variables
+
+| Variable | Effect |
+| --- | --- |
+| `AUTH_PASSWORD` | Optional shared password. Empty/unset = open app. |
+| `AUTH_SECRET` | Optional HMAC key for session cookies; falls back to a value derived from the password. |
+| `NEXT_PUBLIC_SITE_URL` | Canonical origin used for Open Graph metadata. |
+
+`middleware.ts` reads auth env at **build time** (Edge runtime inlining). Changing these variables requires a rebuild/redeploy. The login route reads them at runtime.
+
+## Architecture
+
+```
+src/app/
+  (app)/                  authenticated shell and pages: dashboard, favorites,
+                          search, stock/[symbol]
+  api/                    proxy routes: search, quotes, chart, news, movers,
+                          markets, fx, auth/{login,logout,session}
+  login/                  password gate (outside the app shell)
+  offline/                PWA fallback page
+src/components/           dashboard, stock, search, settings, UI primitives
+src/lib/
+  yahoo.ts                primary provider adapter + normalisation + FX fetch
+  cnbc.ts                 keyless quote fallback for throttled Yahoo requests
+  cache.ts                in-process TTL cache, in-flight coalescing, stale-on-error
+  types.ts                normalised domain types shared by server and client
+  queries.ts              TanStack Query hooks, query keys, currency formatting, prefetch
+  favorites-store.ts      Zustand + persist (localStorage)
+  settings-store.ts       theme + display currency (localStorage)
+  session.ts              HMAC session tokens; Web Crypto only (edge-safe)
+  http.ts                 JSON response helpers + Cache-Control policy
+  ranges.ts               chart range → Yahoo range/interval/TTL mapping
+  universe.ts             index list + 136-symbol movers universe
+src/middleware.ts         optional shared-password gate
+tests/unit/               Vitest tests (adapters, formats, session, cache, store)
+tests/e2e/                Playwright specs + deterministic mock fixtures
+```
+
+Data flow: browser → TanStack Query hook (`src/lib/queries.ts`) → `/api/*` route → `src/lib/yahoo.ts` (with `memoize`) → Yahoo. Quotes fall back to `src/lib/cnbc.ts` per batch when Yahoo returns 429 or errors. Routes respond with `jsonOk` (`s-maxage` + `stale-while-revalidate`).
+
+## Provider notes (important)
+
+- **Symbols are Yahoo-style**, e.g. `AAPL`, `TEF.MC`, `^IXIC`, `BRK-B`. Validate with the regex in `src/lib/yahoo.ts`.
+- Yahoo's **spark** endpoint is used for quotes because the richer `/v7/finance/quote` endpoint requires a crumb. Spark accepts **max 20 symbols per request** and returns price, change, day/52-week ranges, volume and an intraday close series.
+- Yahoo rate-limits aggressively (429). On 429, `yahoo.ts` sets a **90 s cooldown**, skips Yahoo and uses CNBC for quotes. Search, charts and news have no fallback and will surface a retry state. Do not add retry loops that hammer Yahoo.
+- CNBC uses exchange-suffixed tickers too, but indices need mapping (`^IXIC` → `.IXIC`). Add new index mappings to `INDEX_TO_CNBC` in `src/lib/cnbc.ts`. CNBC provides no historical bars.
+- Chart timestamps are **shifted by the exchange's UTC offset** and formatted as UTC on the client so axis labels show exchange-local time. Do not "fix" this by using the browser timezone.
+- Yahoo caps `range=max` history at roughly 3-month granularity. That is expected.
+- FX rates come from open.er-api.com with a Frankfurter fallback, cached six hours. They are display-only; never use them for accounting.
+- `MAX_NEWS_SYMBOLS = 8` bounds news fan-out. Keep it small; each symbol is one Yahoo request.
+
+## Caching layers
+
+1. Browser: TanStack Query persists successful queries to `localStorage` for 24 h (`Providers`), except `search` queries. Assets are cache-first in the service worker.
+2. Server memory: `memoize(key, ttl, loader)` in `src/lib/cache.ts`; deduplicates concurrent loads and serves stale values for up to 6 h on failure.
+3. CDN: route `Cache-Control` via `jsonOk` (`s-maxage`, `stale-while-revalidate`). Keep TTLs aligned with `src/lib/ranges.ts` and the route.
+4. Service worker: static/navigation only. **API responses are intentionally not cached** because auth must stay live; browser query persistence covers offline reads.
+
+## Auth
+
+- Optional single shared password. Session = `v1.<expiresAtMs>.<hmac>` in an HttpOnly, SameSite=Lax cookie.
+- `middleware.ts` guards pages and `/api/*`, allows `/login`, `/api/auth/*`, `/offline`, PWA assets.
+- Login route compares passwords with `timingSafeEqual`, limits failures per instance, and delays failures.
+- `safeNextPath` prevents open redirects. Do not weaken it.
+- Never log or expose `AUTH_PASSWORD` / `AUTH_SECRET`.
+
+## Frontend conventions
+
+- **Persisted state hydration:** any markup that differs between server render and client hydration must be gated with `useHydrated()` (`src/lib/client-hooks.ts`). This applies to favourites, theme and anything read from `localStorage`.
+- **Module-init ordering:** `persist` hydrates synchronously for `localStorage`, so constants used by `merge`/`parseFavorites` must be declared **above** the store. The previous TDZ bug made favourites silently disappear.
+- **Favourites spelling:** the UI uses British "favourites" and the brand is "Stock Googles"; keep copy consistent.
+- **Styling:** Tailwind v4 with CSS variables in `src/app/globals.css` (`--bg`, `--surface`, `--up`, `--down`, `--accent`, …). Use token utilities (`bg-surface`, `text-muted`, `text-up`) rather than raw hex values. Charts read these variables via `getComputedStyle`.
+- **Components:** shadcn-style local components live in `src/components/ui/`; no component library runtime. Prefer `cn()` from `src/lib/utils.ts`.
+- **Numbers:** use formatters from `src/lib/format.ts` (`en-US`, tabular numbers). Do not call `Intl` ad hoc.
+- **Native feel:** keep route transitions client-side, add skeletons rather than layout jumps, prefetch on hover (`usePrefetchStock`), and keep the optimistic star behaviour.
+- **Query keys** live in `queryKeys`; do not hand-write key arrays. `useQuotes` writes each quote into `["quote", symbol]` so detail pages reuse dashboard data.
+
+## API route rules
+
+- Every market route exports `dynamic = "force-dynamic"` and `runtime = "nodejs"` so nothing is fetched at build time.
+- Validate input with Zod; return `jsonError(message, status)`.
+- Map provider failures through `providerErrorMessage`; do not leak stack traces.
+- Response shapes are normalised types from `src/lib/types.ts`.
+- `/api/movers` is intentionally expensive (~7 batched quote calls). It is memoised for 8 minutes and uses `fetchQuotesPartial`; keep that behaviour.
+
+## Tests
+
+- Unit tests must not hit the network. Mock `fetch` and clear `clearMemoCache()` between provider tests.
+- Playwright runs against a **production build** on port `3100` with `AUTH_PASSWORD=test-pass`, `AUTH_SECRET=test-secret`. Market APIs are intercepted in `tests/e2e/helpers.ts`; auth uses the real route handler.
+- `serviceWorkers: "block"` is set because a controlling service worker bypasses `page.route()`.
+- Screenshots/traces go to `test-results/` (gitignored). Do not commit generated artifacts.
+- The login helper waits for the dashboard URL; if a test hangs on login, check the dev server build state first.
+
+## Common tasks
+
+- **Add a chart range:** update `RANGES` in `src/lib/ranges.ts` (id, Yahoo range/interval, TTL) and the range label map in `src/components/stock/stock-view.tsx`. Keep the Yahoo interval valid for the range.
+- **Add an index:** add it to `MARKET_INDICES` in `src/lib/universe.ts` and, if CNBC should cover it, to `INDEX_TO_CNBC` in `src/lib/cnbc.ts`.
+- **Change movers coverage:** edit `MOVERS_UNIVERSE`; keep the list at a size that respects Yahoo's 20-symbol batches and the 60 s function limit.
+- **Swap data provider:** implement the adapter in `src/lib/` returning normalised types, then call it from the route handlers. Do not change component contracts.
+- **Add persisted user preference:** use the Zustand persist pattern in `src/lib/settings-store.ts`, gate rendering with `useHydrated`, and bump the store version if the shape changes.
+- **Icons:** edit the SVGs, then `npm run icons`.
+
+## Do not
+
+- Add a database or server-side user state.
+- Cache `/api/auth/*` responses or service-worker-cache API responses.
+- Hardcode provider keys or secrets.
+- Commit `.env.local`, `.next`, `test-results`, `node_modules`.
+- Bypass `memoize`/CDN caching to "make data fresher"; free providers will throttle.
+- Introduce a second styling system or rewrite the design tokens ad hoc.
+
+## Deployment
+
+Vercel detects Next.js automatically. Set optional auth variables in project settings, rebuild after changing them, and deploy. No migrations, cron jobs or storage provisioning are required.
