@@ -1,0 +1,146 @@
+# Stock Googles
+
+A fast, installable market dashboard for a handful of people. Search any listed company or index worldwide, follow favourites, and see what moved today — no database, no accounts, no paid APIs.
+
+![Next.js](https://img.shields.io/badge/Next.js-15-000?logo=next.js)
+![TypeScript](https://img.shields.io/badge/TypeScript-5-3178c6?logo=typescript)
+![Tailwind CSS](https://img.shields.io/badge/Tailwind-4-06b6d4?logo=tailwindcss)
+![Deploy](https://img.shields.io/badge/Vercel-ready-000?logo=vercel)
+
+## What it does
+
+- **Dashboard first** — your watchlist summary, biggest gainers/losers, index strip and news.
+- **Global search** — companies, ETFs and indices from every major exchange (`AAPL`, `TEF.MC`, `^IXIC`, `0700.HK`, …), with a ⌘K command palette and recent searches.
+- **Detail view** — intraday-to-all-time area chart, live quote, day/52-week ranges, volume, sector, and ticker news.
+- **Favourites** — optimistic star buttons in search, detail and movers; stored in `localStorage`; managed from a dedicated page with sorting, JSON export/import and clear.
+- **Personalised news** — "For you" mixes headlines for your favourites with market-wide stories.
+- **Currency display** — native, EUR or USD, converted with daily reference rates.
+- **Native-feeling UX** — no full reloads, skeletons, hover prefetch, background refresh, a persisted query cache and an installable PWA.
+
+## Stack
+
+| Layer | Choice | Why |
+| --- | --- | --- |
+| Framework | Next.js 15 (App Router, TypeScript) | Server route handlers double as the API proxy; deploys with zero config on Vercel. |
+| UI | Tailwind CSS v4, shadcn-style local components, `lucide-react` | Small bundle, dark/light theming, no component-library weight. |
+| Data fetching | TanStack Query v5 + `localStorage` persister | Cache-sharing, background revalidation, instant reloads, prefetching. |
+| Charts | TradingView `lightweight-charts` v5 | Canvas performance and a native finance feel. |
+| State | Zustand (favourites, settings, toasts) | Tiny, hydrated synchronously from `localStorage`. |
+| Validation | Zod | Route input validation. |
+| Market data | Yahoo Finance + CNBC fallback + open.er-api.com | Keyless and global. See [Data sources](#data-sources). |
+| Tests | Vitest + Testing Library, Playwright | Unit/adapter coverage and browser smoke tests with mocked APIs. |
+
+## Quick start
+
+```bash
+npm install
+cp .env.example .env.local   # optional
+npm run dev                  # http://localhost:3000
+```
+
+The app is open by default. To require a shared password, set `AUTH_PASSWORD` (and ideally a random `AUTH_SECRET`) in `.env.local` and restart.
+
+### Environment variables
+
+| Variable | Required | Description |
+| --- | --- | --- |
+| `AUTH_PASSWORD` | No | Shared password for the whole deployment. Unset/empty = open access. |
+| `AUTH_SECRET` | No | HMAC key used to sign the session cookie. Defaults to a value derived from `AUTH_PASSWORD`. Generate with `openssl rand -base64 32`. |
+| `NEXT_PUBLIC_SITE_URL` | No | Canonical origin for Open Graph metadata. |
+
+## Deploy to Vercel
+
+1. Push this repository to GitHub.
+2. In Vercel, **Add New → Project** and import it. The defaults work (Next.js is detected, Node 20+).
+3. Add `AUTH_PASSWORD` and `AUTH_SECRET` in **Settings → Environment Variables** if you want the password gate, then redeploy. Environment variables for Edge Middleware are read at build time, so change them before building.
+4. Done. No database, cron jobs or other services are needed.
+
+The only runtime requirements are outbound HTTPS requests from Vercel Functions to Yahoo Finance, CNBC and open.er-api.com.
+
+## Data sources
+
+| Purpose | Provider | Notes |
+| --- | --- | --- |
+| Search | Yahoo Finance `v1/finance/search` | Global listings, indices and ETFs. |
+| Quotes, sparklines, 52-week context | Yahoo Finance `v7/finance/spark` (20 symbols/request) | Batched. Falls back to CNBC per batch if Yahoo throttles. |
+| Charts | Yahoo Finance `v8/finance/chart` | Normalised to exchange-local timestamps; `MAX` is capped by Yahoo at ~3-month granularity. |
+| News | Yahoo Finance search news | Per ticker and market-wide, deduped by URL. |
+| Quote fallback | CNBC `restQuote` | Keyless, global, covers most exchange-suffixed tickers. Used only when Yahoo fails. |
+| FX | open.er-api.com (Frankfurter fallback) | Daily rates, cached for six hours. |
+
+**Caveats, stated plainly:**
+
+- Yahoo Finance is an **unofficial** API. It can change, rate-limit a cloud IP (HTTP 429) or be unavailable. This project caches aggressively, serves stale data on failure, and falls back to CNBC for quotes. Search, charts and news remain Yahoo-only; when Yahoo is throttled those panels show a retry state.
+- Quotes are typically delayed **15–20 minutes** depending on the exchange. There is no real-time or websocket feed.
+- The movers module scans a fixed universe of ~136 liquid names (`src/lib/universe.ts`) because Yahoo's screener endpoints are not publicly reachable.
+- News coverage follows Yahoo's editorial coverage and is not exhaustive.
+
+If you want a paid, SLA-backed provider later, replace the functions in `src/lib/yahoo.ts` and `src/lib/cnbc.ts`; routes and components consume normalised types from `src/lib/types.ts`.
+
+## Architecture
+
+```
+src/
+  app/
+    (app)/                 # authenticated shell + pages
+      page.tsx             # dashboard
+      favorites/           # watchlist management
+      search/              # global search page
+      stock/[symbol]/      # detail view
+    api/                   # thin proxy routes (search, quotes, chart, news, movers, markets, fx, auth)
+    login/                 # password gate
+    offline/               # PWA offline fallback
+  components/              # dashboard, stock, search, settings, UI primitives
+  lib/
+    yahoo.ts               # primary provider adapter + normalisation
+    cnbc.ts                # keyless quote fallback
+    cache.ts               # in-process TTL cache, coalescing, stale-on-error
+    queries.ts             # TanStack Query hooks + currency formatting
+    favorites-store.ts     # persisted watchlist
+    settings-store.ts      # theme + display currency
+    session.ts             # HMAC session tokens (edge-safe)
+  middleware.ts            # optional shared-password gate
+```
+
+### Caching layers
+
+1. **Browser query cache** — TanStack Query persists successful queries to `localStorage` for 24 h, so a reload paints the last known prices immediately and then revalidates.
+2. **In-flight coalescing** — identical concurrent upstream calls share one request (`src/lib/cache.ts`).
+3. **Server memory TTL** — quotes 30 s, charts 30 s–30 min depending on range, news 5 min, movers 8 min, FX 6 h.
+4. **CDN** — every API response sends `s-maxage` + `stale-while-revalidate`, so Vercel's edge absorbs repeat traffic.
+5. **Service worker** — cache-first static assets and an offline navigation fallback. API responses are intentionally never cached by the SW (the app's own query cache handles offline reads).
+
+Favourites are written to `localStorage` synchronously, so the star never waits for the network; quotes hydrate in the background.
+
+## API routes
+
+| Route | Query | Cache |
+| --- | --- | --- |
+| `GET /api/search` | `q` | 2 min |
+| `GET /api/quotes` | `symbols` (comma separated, max 40) | 30 s |
+| `GET /api/chart` | `symbol`, `range=1D\|1W\|1M\|6M\|1Y\|5Y\|MAX` | 30 s–30 min |
+| `GET /api/news` | `symbols?`, `market=1`, `limit` | 5 min |
+| `GET /api/movers` | — | 5 min edge / 8 min memory |
+| `GET /api/markets` | — | 60 s |
+| `GET /api/fx` | — | 1 h |
+| `POST /api/auth/login`, `POST /api/auth/logout`, `GET /api/auth/session` | — | no-store |
+
+All market routes validate input with Zod and return `{ error }` with an appropriate status on failure.
+
+## Tests
+
+```bash
+npm test            # Vitest unit tests (adapters, formats, session, cache, store)
+npm run test:e2e    # Playwright smoke tests (mocked market APIs, real auth)
+npm run typecheck
+npm run lint
+```
+
+Playwright needs Chromium (`npx playwright install chromium`, or `--with-deps` on Linux CI). The e2e suite builds the app, starts a production server on port `3100` with `AUTH_PASSWORD=test-pass`, blocks service workers and intercepts market APIs for deterministic results.
+
+## Project notes
+
+- **One writer per working tree** is assumed; favourites are per browser and per origin.
+- The movers universe, range definitions and cache TTLs are the main tuning knobs (`src/lib/universe.ts`, `src/lib/ranges.ts`).
+- `npm run icons` regenerates PWA icons from `public/icons/*.svg`.
+- Not investment advice. Data is provided for information only.
