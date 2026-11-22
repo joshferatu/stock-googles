@@ -86,7 +86,9 @@ test.describe("search and favourites", () => {
 
 test.describe("stock detail", () => {
   test("shows quote, chart, statistics and news; ranges refetch", async ({ page }) => {
-    await mockMarketApi(page);
+    // Delay the chart response: the chart must initialise even when data is not
+    // available on the first render (a production race condition regression).
+    await mockMarketApi(page, { chartDelayMs: 800 });
     await login(page);
     await page.goto("/stock/AAPL");
 

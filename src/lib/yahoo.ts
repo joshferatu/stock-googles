@@ -1,9 +1,14 @@
 import { memoize } from "@/lib/cache";
 import { fetchCnbcQuotes } from "@/lib/cnbc";
+import { ProviderError } from "@/lib/errors";
+import { fetchGoogleNews, googleNewsQuery } from "@/lib/google-news";
 import { RANGES, type RangeId } from "@/lib/ranges";
 import type { ChartPayload, Instrument, NewsItem, Quote, QuoteType } from "@/lib/types";
+import { fetchTradingViewQuotes } from "@/lib/tradingview";
 import { YAHOO_SPARK_BATCH_SIZE } from "@/lib/universe";
 import { round } from "@/lib/utils";
+
+export { ProviderError } from "@/lib/errors";
 
 const HOSTS = ["https://query1.finance.yahoo.com", "https://query2.finance.yahoo.com"];
 const USER_AGENT =
@@ -13,22 +18,13 @@ const TIMEOUT_MS = 6_000;
 let yahooCooldownUntil = 0;
 const COOLDOWN_MS = 90_000;
 
-export class ProviderError extends Error {
-  status: number;
-  constructor(message: string, status = 502) {
-    super(message);
-    this.name = "ProviderError";
-    this.status = status;
-  }
-}
-
 const SYMBOL_PATTERN = /^[A-Za-z0-9^][A-Za-z0-9.^=_-]{0,23}$/;
 
 export function isValidSymbol(symbol: string): boolean {
   return SYMBOL_PATTERN.test(symbol);
 }
 
-export function normalizeSymbols(input: readonly string[] | string): string[] {
+export function normalizeSymbols(input: readonly string[] | string, limit = 40): string[] {
   const list = typeof input === "string" ? input.split(",") : input;
   const seen = new Set<string>();
   const out: string[] = [];
@@ -37,7 +33,7 @@ export function normalizeSymbols(input: readonly string[] | string): string[] {
     if (!symbol || !isValidSymbol(symbol) || seen.has(symbol)) continue;
     seen.add(symbol);
     out.push(symbol);
-    if (out.length >= 40) break;
+    if (out.length >= limit) break;
   }
   return out;
 }
@@ -47,15 +43,15 @@ function sleep(ms: number) {
 }
 
 /**
- * Fetch with a short timeout, host rotation and retries.
+ * Direct Yahoo fetch with host rotation and one retry.
  * Yahoo rate-limits bursts aggressively, so callers must cache and batch.
  */
-async function fetchJson(path: string): Promise<unknown> {
+async function fetchDirectJson(path: string): Promise<unknown> {
   let lastError: unknown = new ProviderError("Market data provider unavailable");
   if (Date.now() < yahooCooldownUntil) {
     throw new ProviderError("Market data provider is rate limiting requests", 429);
   }
-  for (let attempt = 0; attempt < 3; attempt += 1) {
+  for (let attempt = 0; attempt < 2; attempt += 1) {
     const host = HOSTS[attempt % HOSTS.length];
     try {
       const response = await fetch(host + path, {
@@ -85,11 +81,101 @@ async function fetchJson(path: string): Promise<unknown> {
     } catch (error) {
       lastError = error;
     }
-    if (attempt < 2) await sleep(250);
+    if (attempt < 1) await sleep(250);
   }
   throw lastError instanceof Error
     ? new ProviderError(`Market data provider unavailable: ${lastError.message}`, 502)
     : new ProviderError("Market data provider unavailable");
+}
+
+/**
+ * Public reader proxy fallback. Yahoo often throttles cloud egress IPs, so the
+ * same Yahoo endpoint is fetched through r.jina.ai (free tier: 20 req/min).
+ * Jina returns the raw JSON when asked for plain text.
+ */
+const JINA_BASE = "https://r.jina.ai/https://query1.finance.yahoo.com";
+let jinaCooldownUntil = 0;
+
+function jsonStart(text: string): number {
+  const objectStart = text.indexOf("{");
+  const arrayStart = text.indexOf("[");
+  if (objectStart === -1) return arrayStart;
+  if (arrayStart === -1) return objectStart;
+  return Math.min(objectStart, arrayStart);
+}
+
+export function parseLooseJson(text: string): unknown {
+  const start = jsonStart(text);
+  if (start === -1) throw new ProviderError("Proxy returned no JSON payload", 502);
+  try {
+    return JSON.parse(text.slice(start)) as unknown;
+  } catch {
+    throw new ProviderError("Proxy returned malformed JSON", 502);
+  }
+}
+
+async function fetchViaJina(path: string): Promise<unknown> {
+  if (Date.now() < jinaCooldownUntil) {
+    throw new ProviderError("Yahoo proxy is cooling down", 429);
+  }
+  const response = await fetch(`${JINA_BASE}${path}`, {
+    headers: {
+      "User-Agent": USER_AGENT,
+      Accept: "text/plain",
+      "X-Return-Format": "text",
+      "X-No-Cache": "true",
+    },
+    signal: AbortSignal.timeout(12_000),
+    cache: "no-store",
+  });
+  if (response.status === 429) {
+    jinaCooldownUntil = Date.now() + 90_000;
+    throw new ProviderError("Yahoo proxy is rate limiting requests", 429);
+  }
+  if (!response.ok) {
+    throw new ProviderError(`Yahoo proxy returned ${response.status}`, 502);
+  }
+  const remaining = Number(response.headers.get("x-ratelimit-remaining"));
+  if (Number.isFinite(remaining) && remaining <= 1) {
+    jinaCooldownUntil = Date.now() + 60_000;
+  }
+  return parseLooseJson(await response.text());
+}
+
+/**
+ * Yahoo first; when the direct route is blocked, retry through the proxy.
+ * News opts out of the proxy to conserve its request budget.
+ */
+export async function fetchJson(
+  path: string,
+  options: { allowProxy?: boolean } = {},
+): Promise<unknown> {
+  const { allowProxy = true } = options;
+  let lastError: unknown;
+
+  if (Date.now() >= yahooCooldownUntil) {
+    try {
+      return await fetchDirectJson(path);
+    } catch (error) {
+      lastError = error;
+      // Transport-level failures are worth a cooldown; symbol-level 404s are not.
+      if ((error as { status?: number }).status !== 404) {
+        yahooCooldownUntil = Math.max(yahooCooldownUntil, Date.now() + 60_000);
+      }
+    }
+  }
+
+  if (allowProxy) {
+    try {
+      return await fetchViaJina(path);
+    } catch (error) {
+      lastError = error;
+    }
+  }
+
+  throw lastError instanceof Error
+    ? lastError
+    : new ProviderError("Market data provider unavailable", 502);
 }
 
 /** Simple worker pool: keeps upstream bursts small. */
@@ -371,6 +457,7 @@ export function mapChartResult(
     intraday: RANGES[rangeId].intraday,
     baseline,
     performance,
+    source: "yahoo",
     series,
   };
 }
@@ -423,16 +510,36 @@ async function fetchYahooQuoteChunk(chunk: string[]): Promise<Quote[]> {
   });
 }
 
-/** Yahoo first; if it throttles, fall back to CNBC for the same batch. */
+/** Fill gaps left by a partial batch using TradingView's scanner. */
+async function fillMissingQuotes(requested: readonly string[], quotes: Quote[]): Promise<Quote[]> {
+  const have = new Set(quotes.map((quote) => quote.symbol));
+  const missing = requested.filter((symbol) => !have.has(symbol));
+  if (missing.length === 0) return quotes;
+  try {
+    const extra = await fetchTradingViewQuotes(missing);
+    return [...quotes, ...extra.filter((quote) => !have.has(quote.symbol))];
+  } catch {
+    return quotes;
+  }
+}
+
+/** Yahoo → CNBC → TradingView for the same batch. */
 async function fetchQuoteChunk(chunk: string[]): Promise<Quote[]> {
   try {
-    return await fetchYahooQuoteChunk(chunk);
+    const yahoo = await fetchYahooQuoteChunk(chunk);
+    return await fillMissingQuotes(chunk, yahoo);
   } catch (error) {
     try {
-      const fallback = await fetchCnbcQuotes(chunk);
-      if (fallback.length > 0) return fallback;
+      const cnbc = await fetchCnbcQuotes(chunk);
+      if (cnbc.length > 0) return await fillMissingQuotes(chunk, cnbc);
     } catch {
-      // fall through to the original error
+      // Keep trying the next provider.
+    }
+    try {
+      const tradingView = await fetchTradingViewQuotes(chunk);
+      if (tradingView.length > 0) return tradingView;
+    } catch {
+      // Fall through to the original error.
     }
     throw error;
   }
@@ -445,7 +552,7 @@ async function fetchQuoteChunk(chunk: string[]): Promise<Quote[]> {
 export async function fetchQuotesPartial(
   symbols: readonly string[],
 ): Promise<{ quotes: Quote[]; complete: boolean }> {
-  const list = normalizeSymbols(symbols);
+  const list = normalizeSymbols(symbols, 250);
   if (list.length === 0) return { quotes: [], complete: true };
   const chunks: string[][] = [];
   for (let i = 0; i < list.length; i += YAHOO_SPARK_BATCH_SIZE) {
@@ -479,19 +586,42 @@ export async function fetchChart(symbol: string, rangeId: RangeId): Promise<Char
 export async function fetchTickerNews(symbol: string, count = 6): Promise<NewsItem[]> {
   if (!isValidSymbol(symbol)) return [];
   return memoize(`news:${symbol}`, 5 * 60_000, async () => {
-    const payload = (await fetchJson(
-      `/v1/finance/search?q=${encodeURIComponent(symbol)}&quotesCount=0&newsCount=${count}&enableFuzzyQuery=false`,
-    )) as SearchResponse;
-    return mapNewsItems(payload);
+    // News opts out of the Yahoo proxy so its budget stays available for search/charts.
+    try {
+      const payload = (await fetchJson(
+        `/v1/finance/search?q=${encodeURIComponent(symbol)}&quotesCount=0&newsCount=${count}&enableFuzzyQuery=false`,
+        { allowProxy: false },
+      )) as SearchResponse;
+      const items = mapNewsItems(payload);
+      if (items.length > 0) return items;
+    } catch {
+      // Fall through to Google News RSS.
+    }
+    try {
+      return await fetchGoogleNews(googleNewsQuery(symbol), symbol, count);
+    } catch {
+      return [];
+    }
   });
 }
 
 export async function fetchMarketNews(count = 12): Promise<NewsItem[]> {
   return memoize("news:market", 5 * 60_000, async () => {
-    const payload = (await fetchJson(
-      `/v1/finance/search?q=${encodeURIComponent("stock market news")}&quotesCount=0&newsCount=${count}&enableFuzzyQuery=false`,
-    )) as SearchResponse;
-    return mapNewsItems(payload);
+    try {
+      const payload = (await fetchJson(
+        `/v1/finance/search?q=${encodeURIComponent("stock market news")}&quotesCount=0&newsCount=${count}&enableFuzzyQuery=false`,
+        { allowProxy: false },
+      )) as SearchResponse;
+      const items = mapNewsItems(payload);
+      if (items.length > 0) return items;
+    } catch {
+      // Fall through to Google News RSS.
+    }
+    try {
+      return await fetchGoogleNews("stock market", null, count);
+    } catch {
+      return [];
+    }
   });
 }
 

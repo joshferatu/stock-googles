@@ -48,7 +48,9 @@ export function NewsFeed({
 
   const items = useMemo(() => {
     const all = data?.items ?? [];
-    if (!tabs || tab === "market") return all;
+    if (tabs && tab === "market") return all;
+    // "For you" and detail pages prefer tagged headlines, falling back to all
+    // so the section never becomes an empty box.
     const relevant = all.filter((item) => item.tickers.some((ticker) => favoriteSet.has(ticker)));
     return relevant.length > 0 ? relevant : all;
   }, [data, favoriteSet, tab, tabs]);

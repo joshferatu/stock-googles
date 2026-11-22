@@ -183,6 +183,12 @@ export function StockView({ symbol }: { symbol: string }) {
           />
         </div>
 
+        {chart?.note ? (
+          <div className="mx-4 mb-2 mt-3 rounded-lg border border-amber-500/25 bg-amber-500/10 px-3 py-2 text-[10px] leading-relaxed text-amber-700 dark:text-amber-400 sm:mx-5">
+            {chart.note}
+          </div>
+        ) : null}
+
         <div className="mt-2 px-1 sm:px-2">
           {chartQuery.isError && !chart ? (
             <div className="flex h-[300px] flex-col items-center justify-center gap-3 px-6 text-center">
@@ -215,10 +221,14 @@ export function StockView({ symbol }: { symbol: string }) {
             {chartQuery.isFetching
               ? "Updating chart…"
               : chart
-                ? `Source: Yahoo Finance · ${chart.exchangeName ?? quote.exchangeName ?? ""}`
+                ? `Source: ${chart.source === "stockanalysis" ? "StockAnalysis" : "Yahoo Finance"}${
+                    chart.exchangeName ? ` · ${chart.exchangeName}` : ""
+                  }`
                 : "Chart unavailable"}
           </span>
-          <span>Times shown in exchange local time</span>
+          <span>
+            {chart?.source === "stockanalysis" ? "Daily closes" : "Times shown in exchange local time"}
+          </span>
         </div>
       </Card>
 

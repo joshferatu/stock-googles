@@ -1,9 +1,12 @@
 import { jsonError, jsonOk, providerErrorMessage } from "@/lib/http";
 import { parseRange, RANGES, type RangeId } from "@/lib/ranges";
+import { fetchStockAnalysisChart } from "@/lib/stockanalysis";
+import type { ChartPayload } from "@/lib/types";
 import { fetchChart, isValidSymbol } from "@/lib/yahoo";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
+export const maxDuration = 30;
 
 export async function GET(request: Request) {
   const url = new URL(request.url);
@@ -12,11 +15,17 @@ export async function GET(request: Request) {
 
   if (!symbol || !isValidSymbol(symbol)) return jsonError("Invalid symbol.", 400);
 
+  let chart: ChartPayload;
   try {
-    const chart = await fetchChart(symbol, range);
-    return jsonOk(chart, { sMaxAge: RANGES[range].ttl, staleWhileRevalidate: 600 });
-  } catch (error) {
-    const { message, status } = providerErrorMessage(error);
-    return jsonError(message, status);
+    chart = await fetchChart(symbol, range);
+  } catch (primaryError) {
+    try {
+      chart = await fetchStockAnalysisChart(symbol, range);
+    } catch {
+      const { message, status } = providerErrorMessage(primaryError);
+      return jsonError(message, status);
+    }
   }
+
+  return jsonOk(chart, { sMaxAge: RANGES[range].ttl, staleWhileRevalidate: 600 });
 }

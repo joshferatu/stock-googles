@@ -258,6 +258,7 @@ function chartFor(symbol: string, range: string) {
     intraday: range === "1D" || range === "1W",
     baseline: first,
     performance: (last - first) / first,
+    source: "yahoo",
     series,
   };
 }
@@ -270,7 +271,7 @@ async function fulfillJson(route: Route, body: unknown, status = 200) {
   });
 }
 
-export async function mockMarketApi(page: Page) {
+export async function mockMarketApi(page: Page, options: { chartDelayMs?: number } = {}) {
   await page.route("**/api/**", async (route) => {
     const url = new URL(route.request().url());
     const path = url.pathname;
@@ -294,6 +295,9 @@ export async function mockMarketApi(page: Page) {
     if (path === "/api/chart") {
       const symbol = url.searchParams.get("symbol") ?? "AAPL";
       const range = url.searchParams.get("range") ?? "1D";
+      if (options.chartDelayMs) {
+        await new Promise((resolve) => setTimeout(resolve, options.chartDelayMs));
+      }
       return fulfillJson(route, chartFor(symbol, range));
     }
 

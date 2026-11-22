@@ -4,6 +4,7 @@ import { fetchMarketNews, fetchTickerNews, normalizeSymbols } from "@/lib/yahoo"
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
+export const maxDuration = 45;
 
 const MAX_NEWS_SYMBOLS = 8;
 

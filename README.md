@@ -27,7 +27,7 @@ A fast, installable market dashboard for a handful of people. Search any listed 
 | Charts | TradingView `lightweight-charts` v5 | Canvas performance and a native finance feel. |
 | State | Zustand (favourites, settings, toasts) | Tiny, hydrated synchronously from `localStorage`. |
 | Validation | Zod | Route input validation. |
-| Market data | Yahoo Finance + CNBC fallback + open.er-api.com | Keyless and global. See [Data sources](#data-sources). |
+| Market data | Yahoo Finance, Jina reader proxy, StockAnalysis, TradingView, CNBC, Nasdaq, Google News RSS, open.er-api.com | All keyless. See [Data sources](#data-sources). |
 | Tests | Vitest + Testing Library, Playwright | Unit/adapter coverage and browser smoke tests with mocked APIs. |
 
 ## Quick start
@@ -59,18 +59,20 @@ The only runtime requirements are outbound HTTPS requests from Vercel Functions 
 
 ## Data sources
 
-| Purpose | Provider | Notes |
+| Purpose | Provider chain (first success wins) | Notes |
 | --- | --- | --- |
-| Search | Yahoo Finance `v1/finance/search` | Global listings, indices and ETFs. |
-| Quotes, sparklines, 52-week context | Yahoo Finance `v7/finance/spark` (20 symbols/request) | Batched. Falls back to CNBC per batch if Yahoo throttles. |
-| Charts | Yahoo Finance `v8/finance/chart` | Normalised to exchange-local timestamps; `MAX` is capped by Yahoo at ~3-month granularity. |
-| News | Yahoo Finance search news | Per ticker and market-wide, deduped by URL. |
-| Quote fallback | CNBC `restQuote` | Keyless, global, covers most exchange-suffixed tickers. Used only when Yahoo fails. |
-| FX | open.er-api.com (Frankfurter fallback) | Daily rates, cached for six hours. |
+| Search | Yahoo → **StockAnalysis** → **TradingView** → **Nasdaq** | Yahoo gives rich metadata; StockAnalysis covers global listings; TradingView adds broad exchange coverage; Nasdaq is a US-only last resort. |
+| Charts | Yahoo → **StockAnalysis** | StockAnalysis only serves US daily bars on its free endpoint; intraday and international charts stay on Yahoo. Fallback charts carry a visible "daily closes" note. |
+| Quotes | Yahoo → **CNBC** → **TradingView** | Batched 20 symbols/request. CNBC covers most exchange suffixes; TradingView's scanner fills any gaps. |
+| News | Yahoo → **Google News RSS** | Per-ticker and market-wide; deduped by URL. RSS is used when Yahoo's news endpoint is throttled. |
+| Yahoo transport | Direct `query1/query2.finance.yahoo.com` → **`r.jina.ai` reader proxy** | Yahoo throttles cloud egress IPs (HTTP 429). The proxy fetches the same Yahoo JSON from a different network; it is free and limited to ~20 requests/minute. |
+| FX | open.er-api.com → Frankfurter | Daily reference rates, cached for six hours. |
 
 **Caveats, stated plainly:**
 
-- Yahoo Finance is an **unofficial** API. It can change, rate-limit a cloud IP (HTTP 429) or be unavailable. This project caches aggressively, serves stale data on failure, and falls back to CNBC for quotes. Search, charts and news remain Yahoo-only; when Yahoo is throttled those panels show a retry state.
+- All providers are **unofficial public endpoints**. They can change, rate-limit or block cloud IPs. The app tries multiple providers and caches aggressively, but no free provider offers an SLA.
+- Yahoo often blocks Vercel's shared egress IPs with HTTP 429. The app detects this and routes the same Yahoo endpoints through the free `r.jina.ai` reader proxy. If the proxy also fails, search falls back to StockAnalysis/TradingView/Nasdaq and charts fall back to StockAnalysis daily closes.
+- The fallbacks are not feature-identical: StockAnalysis has no intraday bars and only US history; TradingView quotes have no sparkline or day/52-week ranges; Google News headlines are less curated than Yahoo's.
 - Quotes are typically delayed **15–20 minutes** depending on the exchange. There is no real-time or websocket feed.
 - The movers module scans a fixed universe of ~136 liquid names (`src/lib/universe.ts`) because Yahoo's screener endpoints are not publicly reachable.
 - News coverage follows Yahoo's editorial coverage and is not exhaustive.
@@ -104,7 +106,7 @@ src/
 
 ### Caching layers
 
-1. **Browser query cache** — TanStack Query persists successful queries to `localStorage` for 24 h, so a reload paints the last known prices immediately and then revalidates.
+1. **Browser query cache** — TanStack Query persists successful queries to `localStorage` for 24 h, so a reload paints the last known prices immediately and then revalidates. Successful fallback responses are cached just like Yahoo responses.
 2. **In-flight coalescing** — identical concurrent upstream calls share one request (`src/lib/cache.ts`).
 3. **Server memory TTL** — quotes 30 s, charts 30 s–30 min depending on range, news 5 min, movers 8 min, FX 6 h.
 4. **CDN** — every API response sends `s-maxage` + `stale-while-revalidate`, so Vercel's edge absorbs repeat traffic.

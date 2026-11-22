@@ -45,6 +45,8 @@ export interface ChartPoint {
   value: number;
 }
 
+export type ChartSource = "yahoo" | "stockanalysis" | "nasdaq";
+
 export interface ChartPayload {
   symbol: string;
   currency: string | null;
@@ -57,6 +59,10 @@ export interface ChartPayload {
   intraday: boolean;
   baseline: number | null;
   performance: number | null;
+  /** Which provider produced the series. */
+  source: ChartSource;
+  /** Human-readable warning when the data is degraded (e.g. daily fallback). */
+  note?: string;
   series: ChartPoint[];
 }
 

@@ -9,7 +9,7 @@ Guidance for AI coding agents working in this repository. Read it before changin
 Hard constraints:
 
 - **No database.** All user state (favourites, settings, cached quotes) lives in the browser (`localStorage`).
-- **Keyless public APIs.** Yahoo Finance is primary; CNBC is the quote fallback; open.er-api.com provides FX rates.
+- **Keyless public APIs with a provider chain.** Yahoo Finance is primary; StockAnalysis, TradingView, CNBC, Nasdaq, Google News RSS and open.er-api.com provide fallbacks. No paid keys.
 - **Thin server.** Next.js route handlers only proxy and normalise upstream data. There is no server-side user state or session store.
 - **Vercel-first.** No cron jobs, background workers, message queues or extra services.
 
@@ -50,8 +50,13 @@ src/app/
   offline/                PWA fallback page
 src/components/           dashboard, stock, search, settings, UI primitives
 src/lib/
-  yahoo.ts                primary provider adapter + normalisation + FX fetch
-  cnbc.ts                 keyless quote fallback for throttled Yahoo requests
+  yahoo.ts                primary adapter, direct + Jina proxy transport
+  cnbc.ts                 keyless quote fallback
+  stockanalysis.ts        search + US daily chart fallback
+  tradingview.ts          global search + quote fallback
+  nasdaq.ts               US search fallback
+  google-news.ts          RSS news fallback
+  symbols.ts              canonical (Yahoo-style) ↔ provider symbol mapping
   cache.ts                in-process TTL cache, in-flight coalescing, stale-on-error
   types.ts                normalised domain types shared by server and client
   queries.ts              TanStack Query hooks, query keys, currency formatting, prefetch
@@ -66,13 +71,22 @@ tests/unit/               Vitest tests (adapters, formats, session, cache, store
 tests/e2e/                Playwright specs + deterministic mock fixtures
 ```
 
-Data flow: browser → TanStack Query hook (`src/lib/queries.ts`) → `/api/*` route → `src/lib/yahoo.ts` (with `memoize`) → Yahoo. Quotes fall back to `src/lib/cnbc.ts` per batch when Yahoo returns 429 or errors. Routes respond with `jsonOk` (`s-maxage` + `stale-while-revalidate`).
+Data flow: browser → TanStack Query hook (`src/lib/queries.ts`) → `/api/*` route → provider chain → normalised types. Yahoo is attempted directly, then through the `r.jina.ai` reader proxy; each data type has additional fallbacks (see Provider notes). Routes respond with `jsonOk` (`s-maxage` + `stale-while-revalidate`).
 
 ## Provider notes (important)
 
 - **Symbols are Yahoo-style**, e.g. `AAPL`, `TEF.MC`, `^IXIC`, `BRK-B`. Validate with the regex in `src/lib/yahoo.ts`.
 - Yahoo's **spark** endpoint is used for quotes because the richer `/v7/finance/quote` endpoint requires a crumb. Spark accepts **max 20 symbols per request** and returns price, change, day/52-week ranges, volume and an intraday close series.
-- Yahoo rate-limits aggressively (429). On 429, `yahoo.ts` sets a **90 s cooldown**, skips Yahoo and uses CNBC for quotes. Search, charts and news have no fallback and will surface a retry state. Do not add retry loops that hammer Yahoo.
+- Yahoo rate-limits aggressively (429). On 429, `yahoo.ts` sets a **90 s cooldown** and falls back to `r.jina.ai` (same Yahoo JSON through a different network). If the proxy is also cooling down, route-level fallbacks take over. Do not add retry loops that hammer Yahoo or Jina.
+- **Jina proxy budget:** ~20 requests/minute on the free tier. The adapter tracks `x-ratelimit-remaining` and sets a 60 s cooldown when it gets low. News deliberately opts out (`allowProxy: false`) and uses Google News RSS instead. Movers uses 7 batched requests every 8 minutes.
+- **Fallback providers:**
+  - StockAnalysis (`stockanalysis.ts`): global search; US-only daily bars via `/api/symbol/s/{id}/history`. No intraday. Fallback charts set `source: "stockanalysis"` and a `note` shown in the UI.
+  - TradingView (`tradingview.ts`): global symbol search and scanner quotes. Its search cannot resolve `EURONEXT` to a single Yahoo suffix, so those rows are skipped. Quotes have no sparkline/day ranges.
+  - Nasdaq (`nasdaq.ts`): US autocomplete only.
+  - Google News RSS (`google-news.ts`): per-ticker and market news when Yahoo fails.
+  - CNBC (`cnbc.ts`): quote fallback with index ticker mapping (`^IXIC` ↔ `.IXIC`).
+- **Canonical symbols:** all providers map back to Yahoo-style symbols via `symbols.ts`. Do not return provider-native ids to the UI.
+- `normalizeSymbols(symbols, limit)` caps user quote batches at 40. Movers passes `250` so the full 136-name universe is scanned.
 - CNBC uses exchange-suffixed tickers too, but indices need mapping (`^IXIC` → `.IXIC`). Add new index mappings to `INDEX_TO_CNBC` in `src/lib/cnbc.ts`. CNBC provides no historical bars.
 - Chart timestamps are **shifted by the exchange's UTC offset** and formatted as UTC on the client so axis labels show exchange-local time. Do not "fix" this by using the browser timezone.
 - Yahoo caps `range=max` history at roughly 3-month granularity. That is expected.
@@ -123,7 +137,9 @@ Data flow: browser → TanStack Query hook (`src/lib/queries.ts`) → `/api/*` r
 
 ## Common tasks
 
-- **Add a chart range:** update `RANGES` in `src/lib/ranges.ts` (id, Yahoo range/interval, TTL) and the range label map in `src/components/stock/stock-view.tsx`. Keep the Yahoo interval valid for the range.
+- **Add a chart range:** update `RANGES` in `src/lib/ranges.ts` (id, Yahoo range/interval, TTL), the range label map in `src/components/stock/stock-view.tsx`, and `TRAILING_POINTS` in `src/lib/stockanalysis.ts` if the fallback should slice differently.
+- **Add a data provider:** implement the adapter in `src/lib/`, return normalised types, map its identifiers through `src/lib/symbols.ts`, then add it to the relevant route chain (`/api/search`, `/api/chart`, `fetchQuoteChunk`, or the news adapters). Keep provider-native symbols out of the UI.
+- **Chart fallback contract:** every `ChartPayload` must set `source`; degraded data must set `note` so the UI explains itself.
 - **Add an index:** add it to `MARKET_INDICES` in `src/lib/universe.ts` and, if CNBC should cover it, to `INDEX_TO_CNBC` in `src/lib/cnbc.ts`.
 - **Change movers coverage:** edit `MOVERS_UNIVERSE`; keep the list at a size that respects Yahoo's 20-symbol batches and the 60 s function limit.
 - **Swap data provider:** implement the adapter in `src/lib/` returning normalised types, then call it from the route handlers. Do not change component contracts.

@@ -213,25 +213,24 @@ export function PriceChart({
         </div>
       ) : null}
 
-      {!payload ? (
-        <div className="skeleton rounded-xl" style={{ height }} />
-      ) : (
-        <div className="relative" style={{ height }}>
-          <div ref={containerRef} className="absolute inset-0" />
-          {hover ? (
-            <div
-              className="pointer-events-none absolute z-10 min-w-[110px] rounded-lg border border-border-strong/70 bg-surface/95 px-2.5 py-1.5 text-[10px] shadow-xl backdrop-blur"
-              style={{
-                left: Math.min(Math.max(hover.x - 55, 0), (containerRef.current?.clientWidth ?? 200) - 116),
-                top: Math.max(hover.y - 56, 0),
-              }}
-            >
-              <p className="font-mono text-[11px] font-semibold">{formatPrice(hover.price, currency)}</p>
-              <p className="mt-0.5 text-muted">{formatCrosshairTime(hover.time, payload.intraday)}</p>
-            </div>
-          ) : null}
-        </div>
-      )}
+      <div className="relative" style={{ height }}>
+        {/* Kept mounted from the first render: the chart is created in an effect,
+            and waiting for data before mounting the container would leave it blank. */}
+        <div ref={containerRef} className="absolute inset-0" />
+        {!payload ? <div className="skeleton absolute inset-0 rounded-xl" /> : null}
+        {hover && payload ? (
+          <div
+            className="pointer-events-none absolute z-10 min-w-[110px] rounded-lg border border-border-strong/70 bg-surface/95 px-2.5 py-1.5 text-[10px] shadow-xl backdrop-blur"
+            style={{
+              left: Math.min(Math.max(hover.x - 55, 0), (containerRef.current?.clientWidth ?? 200) - 116),
+              top: Math.max(hover.y - 56, 0),
+            }}
+          >
+            <p className="font-mono text-[11px] font-semibold">{formatPrice(hover.price, currency)}</p>
+            <p className="mt-0.5 text-muted">{formatCrosshairTime(hover.time, payload.intraday)}</p>
+          </div>
+        ) : null}
+      </div>
     </div>
   );
 }

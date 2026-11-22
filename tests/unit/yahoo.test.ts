@@ -10,6 +10,7 @@ import {
   mapSearchResults,
   mapSparkResult,
   normalizeSymbols,
+  parseLooseJson,
   ProviderError,
 } from "@/lib/yahoo";
 import { chartPayload, cnbcPayload, searchPayload, sparkPayload } from "../fixtures/market";
@@ -28,6 +29,7 @@ describe("symbol validation", () => {
   it("normalizes, dedupes and caps symbol lists", () => {
     expect(normalizeSymbols("AAPL, MSFT,AAPL, ,bad<script>")).toEqual(["AAPL", "MSFT"]);
     expect(normalizeSymbols(Array.from({ length: 60 }, (_, i) => `S${i}`))).toHaveLength(40);
+    expect(normalizeSymbols(Array.from({ length: 60 }, (_, i) => `S${i}`), 250)).toHaveLength(60);
   });
 });
 
@@ -104,6 +106,7 @@ describe("mapChartResult", () => {
     expect(chart.baseline).toBe(350.1);
     expect(chart.performance).toBeCloseTo((352.4 - 350.1) / 350.1, 5);
     expect(chart.intraday).toBe(false);
+    expect(chart.source).toBe("yahoo");
   });
 
   it("uses the previous close as baseline for the 1D range", () => {
@@ -115,6 +118,19 @@ describe("mapChartResult", () => {
 
   it("throws a 404 provider error when there is no data", () => {
     expect(() => mapChartResult({ chart: { result: [] } }, "1M")).toThrow(ProviderError);
+  });
+});
+
+describe("parseLooseJson", () => {
+  it("parses raw and proxy-wrapped payloads", () => {
+    expect(parseLooseJson('{"ok":true}')).toEqual({ ok: true });
+    expect(parseLooseJson('[1,2]')).toEqual([1, 2]);
+    const wrapped = 'Title: \n\nURL Source: https://example.com\n\nMarkdown Content:\n{"chart":{"result":[]}}';
+    expect(parseLooseJson(wrapped)).toEqual({ chart: { result: [] } });
+  });
+
+  it("rejects payloads without JSON", () => {
+    expect(() => parseLooseJson("no data here")).toThrow(ProviderError);
   });
 });
 
