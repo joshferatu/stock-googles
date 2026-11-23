@@ -1,6 +1,6 @@
 "use client";
 
-import { Download, LogOut, Trash2, Upload } from "lucide-react";
+import { Download, LogOut, MonitorDown, Trash2, Upload } from "lucide-react";
 import Link from "next/link";
 import { useRef, useState } from "react";
 
@@ -16,6 +16,7 @@ import { Segmented } from "@/components/ui/segmented";
 import { useFavorites } from "@/lib/favorites-store";
 import { exportFavoritesFile, importFavoritesFile } from "@/lib/favorites-io";
 import type { DisplayCurrency } from "@/lib/fx";
+import { useInstallPrompt } from "@/lib/install";
 import { useSessionInfo } from "@/lib/queries";
 import { useSettings, type Theme } from "@/lib/settings-store";
 import { toast } from "@/lib/toast-store";
@@ -45,6 +46,7 @@ export function SettingsDialog({
   const favorites = useFavorites((state) => state.favorites);
   const clearFavorites = useFavorites((state) => state.clearFavorites);
   const { data: session } = useSessionInfo();
+  const install = useInstallPrompt();
   const [confirmClear, setConfirmClear] = useState(false);
   const [importing, setImporting] = useState(false);
   const [signingOut, setSigningOut] = useState(false);
@@ -164,6 +166,29 @@ export function SettingsDialog({
               )}
             </div>
           </SettingRow>
+
+          {install.status === "prompt" || install.status === "ios" ? (
+            <SettingRow
+              label="Install app"
+              description={
+                install.status === "ios"
+                  ? "In Safari, tap Share, then “Add to Home Screen”"
+                  : "Add Stock Googles to your home screen or dock"
+              }
+            >
+              {install.status === "prompt" ? (
+                <Button size="sm" variant="outline" onClick={() => void install.promptInstall()}>
+                  <MonitorDown className="size-3.5" />
+                  Install
+                </Button>
+              ) : (
+                <span className="inline-flex items-center gap-1.5 rounded-lg border border-border px-2.5 py-1.5 text-[10px] text-muted">
+                  <MonitorDown className="size-3.5" />
+                  Share → Add to Home Screen
+                </span>
+              )}
+            </SettingRow>
+          ) : null}
 
           {session?.required ? (
             <SettingRow

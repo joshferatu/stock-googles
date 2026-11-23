@@ -1,8 +1,8 @@
 /* Stock Googles service worker: offline shell + conservative API caching. */
-const VERSION = "v1";
+const VERSION = "v2";
 const STATIC_CACHE = `sg-static-${VERSION}`;
 const RUNTIME_CACHE = `sg-runtime-${VERSION}`;
-const SHELL = ["/offline", "/icons/icon.svg", "/icons/icon-192.png", "/manifest.webmanifest"];
+const SHELL = ["/offline", "/icons/emblem.svg", "/icons/icon-192.png", "/manifest.webmanifest"];
 
 self.addEventListener("install", (event) => {
   event.waitUntil(
