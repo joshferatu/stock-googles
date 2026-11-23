@@ -40,6 +40,10 @@ interface SearchResponse {
 interface SessionResponse {
   required: boolean;
   authenticated: boolean;
+  email: string | null;
+  name: string | null;
+  mode: "open" | "password" | "google" | "mock";
+  sso: boolean;
 }
 
 export const queryKeys = {

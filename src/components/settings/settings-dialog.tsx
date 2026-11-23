@@ -3,6 +3,7 @@
 import { Download, LogOut, Trash2, Upload } from "lucide-react";
 import { useRef, useState } from "react";
 
+import { PrivateAlphaBadge } from "@/components/private-alpha-badge";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -164,20 +165,38 @@ export function SettingsDialog({
           </SettingRow>
 
           {session?.required ? (
-            <SettingRow label="Session" description="This dashboard is protected by a shared password">
-              <Button size="sm" variant="outline" loading={signingOut} onClick={() => void signOut()}>
-                <LogOut className="size-3.5" />
-                Sign out
-              </Button>
+            <SettingRow
+              label="Session"
+              description={
+                session.email
+                  ? `Signed in with Google${session.mode === "mock" ? " (local mock)" : ""}`
+                  : "Shared password session"
+              }
+            >
+              <div className="flex flex-wrap items-center justify-end gap-2">
+                {session.email ? (
+                  <span
+                    className="max-w-[200px] truncate rounded-md bg-surface-2 px-2 py-1 font-mono text-[10px] text-fg"
+                    title={session.email}
+                  >
+                    {session.email}
+                  </span>
+                ) : null}
+                <Button size="sm" variant="outline" loading={signingOut} onClick={() => void signOut()}>
+                  <LogOut className="size-3.5" />
+                  Sign out
+                </Button>
+              </div>
             </SettingRow>
           ) : null}
 
           <div className="px-5 py-4 text-[10px] leading-relaxed text-muted">
+            <PrivateAlphaBadge className="mb-2 justify-start" withCopy />
             <p className="font-medium text-fg/80">Stock Googles · v1.0</p>
             <p className="mt-1">
-              Quotes, charts and headlines come from Yahoo Finance. Currency rates come from open.er-api.com (with a
-              Frankfurter fallback). Data may be delayed by 15–20 minutes and is provided for information only, not
-              investment advice.
+              Quotes, charts and headlines come from Yahoo Finance and keyless fallback providers. Currency rates come
+              from open.er-api.com (with a Frankfurter fallback). Data may be delayed by 15–20 minutes and is provided
+              for information only, not investment advice.
             </p>
           </div>
         </div>

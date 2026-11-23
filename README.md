@@ -38,24 +38,85 @@ cp .env.example .env.local   # optional
 npm run dev                  # http://localhost:3000
 ```
 
-The app is open by default. To require a shared password, set `AUTH_PASSWORD` (and ideally a random `AUTH_SECRET`) in `.env.local` and restart.
+The app is open by default. For the Private Alpha flow, set `AUTH_PASSWORD`, `AUTH_SECRET` and the Google OAuth credentials (see [Authentication](#authentication-private-alpha)). Without auth env vars the app stays open.
 
 ### Environment variables
 
 | Variable | Required | Description |
 | --- | --- | --- |
-| `AUTH_PASSWORD` | No | Shared password for the whole deployment. Unset/empty = open access. |
-| `AUTH_SECRET` | No | HMAC key used to sign the session cookie. Defaults to a value derived from `AUTH_PASSWORD`. Generate with `openssl rand -base64 32`. |
-| `NEXT_PUBLIC_SITE_URL` | No | Canonical origin for Open Graph metadata. |
+| `AUTH_PASSWORD` | No | First gate: shared password. Unset/empty = no password screen. |
+| `AUTH_SECRET` | Required with SSO | HMAC key for signed cookies. Defaults to a value derived from `AUTH_PASSWORD`. Generate with `openssl rand -base64 32`. |
+| `GOOGLE_CLIENT_ID` | No | OAuth client ID. With the secret, enables Google SSO as the second gate. |
+| `GOOGLE_CLIENT_SECRET` | No | OAuth client secret. |
+| `GOOGLE_ALLOWED_DOMAIN` | No | Allowed Google account domain. Defaults to `gmail.com`. |
+| `GOOGLE_AUTH_MOCK` | No | Local/E2E only: simulates Google without a client. Ignored on Vercel production. |
+| `NEXT_PUBLIC_SITE_URL` | With SSO | Canonical origin; used for the OAuth redirect URI and Open Graph metadata. |
 
 ## Deploy to Vercel
 
 1. Push this repository to GitHub.
 2. In Vercel, **Add New → Project** and import it. The defaults work (Next.js is detected, Node 20+).
-3. Add `AUTH_PASSWORD` and `AUTH_SECRET` in **Settings → Environment Variables** if you want the password gate, then redeploy. Environment variables for Edge Middleware are read at build time, so change them before building.
+3. Add the auth variables in **Settings → Environment Variables**, then redeploy. Environment variables for Edge Middleware are read at build time, so set them before building.
 4. Done. No database, cron jobs or other services are needed.
 
-The only runtime requirements are outbound HTTPS requests from Vercel Functions to Yahoo Finance, CNBC and open.er-api.com.
+The only runtime requirements are outbound HTTPS requests from Vercel Functions to the market-data providers, Google's OAuth endpoints and open.er-api.com.
+
+## Authentication (Private Alpha)
+
+The app is labelled **Private Alpha — early access; data and features may change**. Access uses two gates:
+
+1. **Shared password** (`/login`) — issues a short-lived password gate (15 minutes). The password alone does **not** grant app access when Google SSO is configured.
+2. **Google SSO** (`/login/google`) — authorization code + PKCE, verified email, gmail.com domain. Issues a 30-day session.
+
+Settings shows the signed-in email next to **Sign out**. Sign out clears local cookies only; it does not sign out of Google. Google SSO identifies the user; it does **not** fetch market data or use Google Finance.
+
+### Create the Google OAuth client
+
+There is no official shared client to reuse; each deployment needs its own OAuth 2.0 **Web application** client.
+
+1. Open [Google Cloud Console](https://console.cloud.google.com/) and create/select a project.
+2. **APIs & Services → OAuth consent screen**:
+   - User type **External**, app name **Stock Googles**, support email, developer contact.
+   - Scopes: `openid`, `email`, `profile` (non-sensitive).
+   - Add the Gmail accounts as **test users** while testing, or **Publish app** to accept any Google account.
+3. **APIs & Services → Credentials → Create credentials → OAuth client ID → Web application**.
+   - Authorized JavaScript origins: `https://stock-googles.vercel.app` (optional for this server flow) and `http://localhost:3000`.
+   - Authorized redirect URIs:
+     - `https://stock-googles.vercel.app/api/auth/google/callback`
+     - `http://localhost:3000/api/auth/google/callback`
+4. Copy the **Client ID** and **Client secret** into `GOOGLE_CLIENT_ID` and `GOOGLE_CLIENT_SECRET`.
+
+> While the consent screen is in **Testing**, only listed test users can sign in. Publishing the app (with the non-sensitive scopes above) is what allows any `@gmail.com` account to complete the second gate.
+
+### Environment values
+
+| Variable | Value |
+| --- | --- |
+| `AUTH_PASSWORD` | The shared first-gate password. |
+| `AUTH_SECRET` | `openssl rand -base64 32` |
+| `GOOGLE_CLIENT_ID` | From the OAuth client. |
+| `GOOGLE_CLIENT_SECRET` | From the OAuth client. Keep it out of git. |
+| `GOOGLE_ALLOWED_DOMAIN` | `gmail.com` (default). |
+| `NEXT_PUBLIC_SITE_URL` | `https://stock-googles.vercel.app` |
+| `GOOGLE_AUTH_MOCK` | Leave unset in production. |
+
+Set these in Vercel → **Settings → Environment Variables** and redeploy. Middleware env vars are read at build time.
+
+### Local development without a Google client
+
+```bash
+AUTH_PASSWORD=dev GOOGLE_AUTH_MOCK=1 npm run dev
+```
+
+The password step works normally; `/login/google` then shows an email form instead of the Google popup. Only `@gmail.com` addresses pass. Mock mode is ignored when `VERCEL_ENV=production`, so it cannot weaken the Vercel deployment.
+
+### Session details
+
+- Password gate: signed HttpOnly `sg_gate`, 15 minutes, cleared after SSO.
+- OAuth state + PKCE verifier: signed HttpOnly `sg_oauth`, 10 minutes, single-use.
+- Full session: signed HttpOnly `sg_session`, 30 days, contains the verified email.
+- Tokens are HMAC-SHA256 and stateless. Deploying this change invalidates older cookies; everyone re-authenticates.
+- Logout clears all three cookies locally.
 
 ## Data sources
 
@@ -126,6 +187,7 @@ Favourites are written to `localStorage` synchronously, so the star never waits 
 | `GET /api/markets` | — | 60 s |
 | `GET /api/fx` | — | 1 h |
 | `POST /api/auth/login`, `POST /api/auth/logout`, `GET /api/auth/session` | — | no-store |
+| `GET /api/auth/google/start`, `GET /api/auth/google/callback`, `POST /api/auth/google/mock` | OAuth code/state | no-store |
 
 All market routes validate input with Zod and return `{ error }` with an appropriate status on failure.
 
@@ -138,7 +200,7 @@ npm run typecheck
 npm run lint
 ```
 
-Playwright needs Chromium (`npx playwright install chromium`, or `--with-deps` on Linux CI). The e2e suite builds the app, starts a production server on port `3100` with `AUTH_PASSWORD=test-pass`, blocks service workers and intercepts market APIs for deterministic results.
+Playwright needs Chromium (`npx playwright install chromium`, or `--with-deps` on Linux CI). The e2e suite builds the app, starts a production server on port `3100` with `AUTH_PASSWORD=test-pass` and `GOOGLE_AUTH_MOCK=1`, blocks service workers and intercepts market APIs for deterministic results. The login helper walks through both gates.
 
 ## Project notes
 

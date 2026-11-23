@@ -12,6 +12,7 @@ import {
 import { useEffect, useState } from "react";
 
 import { CurrencySwitcher } from "@/components/currency-switcher";
+import { PrivateAlphaBadge } from "@/components/private-alpha-badge";
 import { SearchCommand } from "@/components/search/search-command";
 import { SettingsDialog } from "@/components/settings/settings-dialog";
 import { ThemeToggle } from "@/components/theme-toggle";
@@ -111,6 +112,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
               <Settings className="size-4.5" />
               Settings
             </button>
+            <PrivateAlphaBadge className="justify-start px-3" />
             <p className="px-3 text-[10px] leading-relaxed text-muted/70">
               Prices may be delayed. Not investment advice.
             </p>

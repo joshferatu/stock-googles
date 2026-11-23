@@ -1,7 +1,7 @@
 import { Suspense } from "react";
 
 import { LoginForm } from "@/components/login-form";
-import { safeNextPath } from "@/lib/session";
+import { authConfig, safeNextPath } from "@/lib/session";
 
 export const metadata = {
   title: "Sign in",
@@ -14,9 +14,10 @@ export default async function LoginPage({
 }) {
   const params = await searchParams;
   const rawNext = Array.isArray(params.next) ? params.next[0] : params.next;
+  const config = authConfig();
   return (
     <Suspense>
-      <LoginForm next={safeNextPath(rawNext)} />
+      <LoginForm next={safeNextPath(rawNext)} sso={config.sso} />
     </Suspense>
   );
 }

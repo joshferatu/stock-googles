@@ -40,6 +40,39 @@ test.describe("dashboard", () => {
   });
 });
 
+test.describe("private alpha auth", () => {
+  test("password → Google → app, shows the email and signs out", async ({ page }) => {
+    await mockMarketApi(page);
+    await page.goto("/login");
+    await expect(page.getByText(/Private Alpha — early access/)).toBeVisible();
+
+    await page.getByLabel("Shared password").fill("test-pass");
+    await page.getByRole("button", { name: "Continue" }).click();
+    await expect(page).toHaveURL(/\/login\/google/);
+    await expect(page.getByText("Step 2 of 2")).toBeVisible();
+
+    await page.getByLabel("Google email").fill("alpha@gmail.com");
+    await page.getByRole("button", { name: "Continue with Google" }).click();
+    await expect(page.getByRole("heading", { name: "Market overview" })).toBeVisible();
+
+    await page.getByRole("button", { name: "Settings" }).last().click();
+    await expect(page.getByText("alpha@gmail.com")).toBeVisible();
+    await page.getByRole("button", { name: "Sign out" }).click();
+    await expect(page).toHaveURL(/\/login/);
+  });
+
+  test("rejects a non-gmail mock account", async ({ page }) => {
+    await mockMarketApi(page);
+    await page.goto("/login");
+    await page.getByLabel("Shared password").fill("test-pass");
+    await page.getByRole("button", { name: "Continue" }).click();
+    await page.waitForURL((url) => url.pathname === "/login/google");
+    await page.getByLabel("Google email").fill("alpha@company.com");
+    await page.getByRole("button", { name: "Continue with Google" }).click();
+    await expect(page.getByText(/Use an @gmail\.com email address/)).toBeVisible();
+  });
+});
+
 test.describe("search and favourites", () => {
   test("star from search persists after reload", async ({ page }) => {
     await mockMarketApi(page);

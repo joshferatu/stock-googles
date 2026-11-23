@@ -3,7 +3,11 @@ import { z } from "zod";
 
 import {
   authConfig,
+  cookieOptions,
+  createGateToken,
   createSessionToken,
+  GATE_COOKIE,
+  GATE_MAX_AGE_SECONDS,
   SESSION_COOKIE,
   sessionCookieOptions,
   timingSafeEqual,
@@ -45,7 +49,12 @@ function registerFailure(key: string) {
 export async function POST(request: Request) {
   const config = authConfig();
   if (!config.enabled) {
-    return NextResponse.json({ ok: true, required: false });
+    return NextResponse.json({ ok: true, required: false, stage: "app" });
+  }
+
+  if (!config.passwordGate) {
+    // Google-only deployments skip the password screen.
+    return NextResponse.json({ ok: true, required: true, stage: config.sso ? "google" : "app" });
   }
 
   const key = clientKey(request);
@@ -69,8 +78,16 @@ export async function POST(request: Request) {
   }
 
   failures.delete(key);
-  const { token } = await createSessionToken(config.secret);
-  const response = NextResponse.json({ ok: true, required: true });
+
+  if (config.sso) {
+    const gate = await createGateToken(config.secret);
+    const response = NextResponse.json({ ok: true, required: true, stage: "google" });
+    response.cookies.set(GATE_COOKIE, gate, cookieOptions(GATE_MAX_AGE_SECONDS));
+    return response;
+  }
+
+  const { token } = await createSessionToken(config.secret, { email: null });
+  const response = NextResponse.json({ ok: true, required: true, stage: "app" });
   response.cookies.set(SESSION_COOKIE, token, sessionCookieOptions());
   return response;
 }

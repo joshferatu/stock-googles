@@ -24,6 +24,8 @@ export default defineConfig({
     env: {
       AUTH_PASSWORD: "test-pass",
       AUTH_SECRET: "test-secret",
+      GOOGLE_AUTH_MOCK: "1",
+      GOOGLE_ALLOWED_DOMAIN: "gmail.com",
       NEXT_TELEMETRY_DISABLED: "1",
     },
   },

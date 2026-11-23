@@ -276,12 +276,9 @@ export async function mockMarketApi(page: Page, options: { chartDelayMs?: number
     const url = new URL(route.request().url());
     const path = url.pathname;
 
-    // Let the real auth endpoints run.
-    if (path.startsWith("/api/auth/login") || path.startsWith("/api/auth/logout")) {
+    // Let the real auth endpoints run (password, mock Google, session, logout).
+    if (path.startsWith("/api/auth/")) {
       return route.fallback();
-    }
-    if (path === "/api/auth/session") {
-      return fulfillJson(route, { required: true, authenticated: true });
     }
 
     if (path === "/api/quotes") {
@@ -344,10 +341,13 @@ export async function mockMarketApi(page: Page, options: { chartDelayMs?: number
   });
 }
 
-export async function login(page: Page) {
+export async function login(page: Page, email = "alpha@gmail.com") {
   await page.goto("/login");
   await page.getByLabel("Shared password").fill("test-pass");
-  await page.getByRole("button", { name: "Enter dashboard" }).click();
+  await page.getByRole("button", { name: "Continue" }).click();
+  await page.waitForURL((url) => url.pathname === "/login/google", { timeout: 45_000 });
+  await page.getByLabel("Google email").fill(email);
+  await page.getByRole("button", { name: "Continue with Google" }).click();
   await page.waitForURL((url) => url.pathname === "/", { timeout: 45_000 });
 }
 

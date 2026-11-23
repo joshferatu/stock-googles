@@ -4,10 +4,11 @@ import { ChartCandlestick, Lock } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
 
+import { PrivateAlphaBadge } from "@/components/private-alpha-badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 
-export function LoginForm({ next }: { next: string }) {
+export function LoginForm({ next, sso }: { next: string; sso: boolean }) {
   const router = useRouter();
   const [password, setPassword] = useState("");
   const [error, setError] = useState<string | null>(null);
@@ -30,7 +31,14 @@ export function LoginForm({ next }: { next: string }) {
         setLoading(false);
         return;
       }
-      router.replace(next);
+      const body = (await response.json().catch(() => null)) as { stage?: "google" | "app" } | null;
+      if (body?.stage === "google") {
+        const target =
+          next === "/" ? "/login/google" : `/login/google?next=${encodeURIComponent(next)}`;
+        router.replace(target);
+      } else {
+        router.replace(next);
+      }
       router.refresh();
     } catch {
       setError("Network unavailable. Try again.");
@@ -47,16 +55,31 @@ export function LoginForm({ next }: { next: string }) {
             <span className="absolute inset-0 bg-gradient-to-b from-white/25 to-transparent" />
           </span>
           <h1 className="mt-4 text-2xl font-semibold tracking-tight">
-            Stock <span className="bg-gradient-to-r from-accent to-accent-2 bg-clip-text text-transparent">Googles</span>
+            Stock{" "}
+            <span className="bg-gradient-to-r from-accent to-accent-2 bg-clip-text text-transparent">
+              Googles
+            </span>
           </h1>
-          <p className="mt-1.5 text-xs text-muted">Private market dashboard · global quotes, favourites and movers.</p>
+          <PrivateAlphaBadge className="mt-2" />
+          <p className="mt-2 max-w-xs text-[11px] leading-relaxed text-muted">
+            Private Alpha — early access; data and features may change.
+          </p>
         </div>
 
         <form
           onSubmit={onSubmit}
           className="rounded-2xl border border-border bg-surface/70 p-5 shadow-xl backdrop-blur"
         >
-          <label htmlFor="password" className="mb-1.5 flex items-center gap-1.5 text-[11px] font-medium text-muted">
+          <div className="mb-3 flex items-center justify-between gap-2">
+            <span className="text-[10px] font-semibold uppercase tracking-[0.14em] text-muted">
+              {sso ? "Step 1 of 2 · shared password" : "Shared password"}
+            </span>
+          </div>
+
+          <label
+            htmlFor="password"
+            className="mb-1.5 flex items-center gap-1.5 text-[11px] font-medium text-muted"
+          >
             <Lock className="size-3" />
             Shared password
           </label>
@@ -78,10 +101,12 @@ export function LoginForm({ next }: { next: string }) {
             </p>
           ) : null}
           <Button type="submit" variant="primary" size="lg" loading={loading} className="mt-3 w-full">
-            Enter dashboard
+            {sso ? "Continue" : "Enter dashboard"}
           </Button>
           <p className="mt-3 text-center text-[10px] leading-relaxed text-muted/80">
-            No accounts, no database. The password protects the deployment; favourites live in your browser.
+            {sso
+              ? "Next: sign in with your Google account. Only @gmail.com accounts are accepted during the alpha."
+              : "No accounts, no database. The password protects the deployment; favourites live in your browser."}
           </p>
         </form>
       </div>

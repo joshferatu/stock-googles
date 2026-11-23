@@ -32,9 +32,12 @@ Never run `next dev` and `next start` at the same time: they share `.next` and c
 
 | Variable | Effect |
 | --- | --- |
-| `AUTH_PASSWORD` | Optional shared password. Empty/unset = open app. |
-| `AUTH_SECRET` | Optional HMAC key for session cookies; falls back to a value derived from the password. |
-| `NEXT_PUBLIC_SITE_URL` | Canonical origin used for Open Graph metadata. |
+| `AUTH_PASSWORD` | First gate: shared password. Empty/unset = no password screen. |
+| `AUTH_SECRET` | HMAC key for signed cookies; falls back to a value derived from the password. |
+| `GOOGLE_CLIENT_ID` / `GOOGLE_CLIENT_SECRET` | Enable the second gate (Google OIDC). Both are required. |
+| `GOOGLE_ALLOWED_DOMAIN` | Allowed Google email domain. Defaults to `gmail.com`. |
+| `GOOGLE_AUTH_MOCK` | Local/E2E only; simulates Google. Ignored when `VERCEL_ENV=production`. |
+| `NEXT_PUBLIC_SITE_URL` | Canonical origin; builds the OAuth redirect URI and Open Graph metadata. |
 
 `middleware.ts` reads auth env at **build time** (Edge runtime inlining). Changing these variables requires a rebuild/redeploy. The login route reads them at runtime.
 
@@ -46,7 +49,7 @@ src/app/
                           search, stock/[symbol]
   api/                    proxy routes: search, quotes, chart, news, movers,
                           markets, fx, auth/{login,logout,session}
-  login/                  password gate (outside the app shell)
+  login/                  password gate + Google step (outside the app shell)
   offline/                PWA fallback page
 src/components/           dashboard, stock, search, settings, UI primitives
 src/lib/
@@ -62,7 +65,8 @@ src/lib/
   queries.ts              TanStack Query hooks, query keys, currency formatting, prefetch
   favorites-store.ts      Zustand + persist (localStorage)
   settings-store.ts       theme + display currency (localStorage)
-  session.ts              HMAC session tokens; Web Crypto only (edge-safe)
+  session.ts              signed session/gate/OAuth tokens; Web Crypto only (edge-safe)
+  google.ts               Google OIDC helpers (auth URL, token exchange, userinfo)
   http.ts                 JSON response helpers + Cache-Control policy
   ranges.ts               chart range → Yahoo range/interval/TTL mapping
   universe.ts             index list + 136-symbol movers universe
@@ -100,13 +104,16 @@ Data flow: browser → TanStack Query hook (`src/lib/queries.ts`) → `/api/*` r
 3. CDN: route `Cache-Control` via `jsonOk` (`s-maxage`, `stale-while-revalidate`). Keep TTLs aligned with `src/lib/ranges.ts` and the route.
 4. Service worker: static/navigation only. **API responses are intentionally not cached** because auth must stay live; browser query persistence covers offline reads.
 
-## Auth
+## Auth (Private Alpha, two gates)
 
-- Optional single shared password. Session = `v1.<expiresAtMs>.<hmac>` in an HttpOnly, SameSite=Lax cookie.
-- `middleware.ts` guards pages and `/api/*`, allows `/login`, `/api/auth/*`, `/offline`, PWA assets.
-- Login route compares passwords with `timingSafeEqual`, limits failures per instance, and delays failures.
-- `safeNextPath` prevents open redirects. Do not weaken it.
-- Never log or expose `AUTH_PASSWORD` / `AUTH_SECRET`.
+- **Stage 1 — shared password.** `POST /api/auth/login` checks `AUTH_PASSWORD`, rate-limits failures and sets a signed 15-minute `sg_gate` cookie. With SSO configured it must **not** issue a full session.
+- **Stage 2 — Google OIDC.** `/login/google` → `/api/auth/google/start` (random state + PKCE S256, signed 10-minute `sg_oauth` cookie) → Google → `/api/auth/google/callback`. The callback exchanges the code, reads Google userinfo, requires `email_verified` and an address in `GOOGLE_ALLOWED_DOMAIN` (default `gmail.com`), then issues a 30-day `sg_session` containing the email.
+- **Tokens:** `base64url(JSON).base64url(HMAC-SHA256)` with an `exp` claim. Full sessions carry `email` (null for password-only). Old `v1.*` cookies are intentionally invalid. Use `safeNextPath` for all redirects.
+- **Middleware:** `open` → no auth; `password` → any valid session; `google`/`mock` → a session **with an email**. Public: `/login`, `/login/google`, `/api/auth/*`, `/offline`, PWA assets. `/login/google` requires the gate when `AUTH_PASSWORD` is set.
+- **Settings/logout:** `/api/auth/session` returns `email`, `name`, `mode`, `sso`; Settings shows the email next to Sign out. Logout clears `sg_session`, `sg_gate` and `sg_oauth` locally; it does not sign out of Google.
+- **Mock mode:** `GOOGLE_AUTH_MOCK=1` (local/E2E) turns `/login/google` into an email form and enables `/api/auth/google/mock`. `googleAuthConfig()` ignores it when `VERCEL_ENV=production`. Do not use it as a production login.
+- **Identity only:** Google SSO never touches market data; do not add Google Finance/Sheets calls here.
+- Never log or expose `AUTH_PASSWORD`, `AUTH_SECRET`, `GOOGLE_CLIENT_SECRET`, OAuth codes or session tokens. Keep PKCE and state verification intact.
 
 ## Frontend conventions
 
@@ -130,7 +137,7 @@ Data flow: browser → TanStack Query hook (`src/lib/queries.ts`) → `/api/*` r
 ## Tests
 
 - Unit tests must not hit the network. Mock `fetch` and clear `clearMemoCache()` between provider tests.
-- Playwright runs against a **production build** on port `3100` with `AUTH_PASSWORD=test-pass`, `AUTH_SECRET=test-secret`. Market APIs are intercepted in `tests/e2e/helpers.ts`; auth uses the real route handler.
+- Playwright runs against a **production build** on port `3100` with `AUTH_PASSWORD=test-pass`, `AUTH_SECRET=test-secret` and `GOOGLE_AUTH_MOCK=1`. Market APIs are intercepted in `tests/e2e/helpers.ts`; password, mock Google, session and logout use the real route handlers. `login()` completes both gates.
 - `serviceWorkers: "block"` is set because a controlling service worker bypasses `page.route()`.
 - Screenshots/traces go to `test-results/` (gitignored). Do not commit generated artifacts.
 - The login helper waits for the dashboard URL; if a test hangs on login, check the dev server build state first.
@@ -144,6 +151,8 @@ Data flow: browser → TanStack Query hook (`src/lib/queries.ts`) → `/api/*` r
 - **Change movers coverage:** edit `MOVERS_UNIVERSE`; keep the list at a size that respects Yahoo's 20-symbol batches and the 60 s function limit.
 - **Swap data provider:** implement the adapter in `src/lib/` returning normalised types, then call it from the route handlers. Do not change component contracts.
 - **Add persisted user preference:** use the Zustand persist pattern in `src/lib/settings-store.ts`, gate rendering with `useHydrated`, and bump the store version if the shape changes.
+- **Change the Google policy:** the domain allowlist lives in `googleAuthConfig()` (`GOOGLE_ALLOWED_DOMAIN`, default `gmail.com`); email verification happens in the callback. Do not trust a client-supplied email.
+- **Add another auth method:** issue the same `sg_session` payload through `createSessionToken` after verifying the identity; the middleware does not need to know the provider.
 - **Icons:** edit the SVGs, then `npm run icons`.
 
 ## Do not
