@@ -1,6 +1,7 @@
 "use client";
 
 import { ChartCandlestick, Lock } from "lucide-react";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
 
@@ -109,6 +110,13 @@ export function LoginForm({ next, sso }: { next: string; sso: boolean }) {
               : "No accounts, no database. The password protects the deployment; favourites live in your browser."}
           </p>
         </form>
+
+        <Link
+          href="/privacy"
+          className="mt-4 block text-center text-[10px] text-muted transition hover:text-fg"
+        >
+          Privacy policy
+        </Link>
       </div>
     </div>
   );

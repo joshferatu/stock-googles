@@ -36,7 +36,7 @@ export async function middleware(request: NextRequest) {
   const gate = await verifyGateToken(request.cookies.get(GATE_COOKIE)?.value, config.secret);
 
   if (pathname.startsWith("/api/auth/")) return NextResponse.next();
-  if (pathname === "/offline") return NextResponse.next();
+  if (pathname === "/offline" || pathname === "/privacy") return NextResponse.next();
 
   if (pathname === "/login") {
     if (authenticated) return redirect(request, "/");

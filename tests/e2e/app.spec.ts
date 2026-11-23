@@ -61,6 +61,13 @@ test.describe("private alpha auth", () => {
     await expect(page).toHaveURL(/\/login/);
   });
 
+  test("privacy policy is public for Google OAuth review", async ({ page }) => {
+    await page.goto("/privacy");
+    await expect(page.getByRole("heading", { name: "Privacy Policy" })).toBeVisible();
+    await expect(page.getByText(/Google API Services User Data Policy/)).toBeVisible();
+    await expect(page.getByText("Back to sign in")).toBeVisible();
+  });
+
   test("rejects a non-gmail mock account", async ({ page }) => {
     await mockMarketApi(page);
     await page.goto("/login");

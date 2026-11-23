@@ -51,6 +51,7 @@ The app is open by default. For the Private Alpha flow, set `AUTH_PASSWORD`, `AU
 | `GOOGLE_ALLOWED_DOMAIN` | No | Allowed Google account domain. Defaults to `gmail.com`. |
 | `GOOGLE_AUTH_MOCK` | No | Local/E2E only: simulates Google without a client. Ignored on Vercel production. |
 | `NEXT_PUBLIC_SITE_URL` | With SSO | Canonical origin; used for the OAuth redirect URI and Open Graph metadata. |
+| `NEXT_PUBLIC_CONTACT_EMAIL` | Recommended | Shown as the privacy contact on `/privacy`; use the same address as the OAuth support email. |
 
 ## Deploy to Vercel
 
@@ -79,12 +80,18 @@ There is no official shared client to reuse; each deployment needs its own OAuth
    - User type **External**, app name **Stock Googles**, support email, developer contact.
    - Scopes: `openid`, `email`, `profile` (non-sensitive).
    - Add the Gmail accounts as **test users** while testing, or **Publish app** to accept any Google account.
-3. **APIs & Services → Credentials → Create credentials → OAuth client ID → Web application**.
+3. **Branding** (required to publish):
+   - Application home page: `https://stock-googles.vercel.app/login`
+   - Privacy policy: `https://stock-googles.vercel.app/privacy`
+   - Authorized domain: `stock-googles.vercel.app`
+   - App logo: `public/icons/icon-512.png`
+   - Set `NEXT_PUBLIC_CONTACT_EMAIL` to the same address as the support email.
+4. **APIs & Services → Credentials → Create credentials → OAuth client ID → Web application**.
    - Authorized JavaScript origins: `https://stock-googles.vercel.app` (optional for this server flow) and `http://localhost:3000`.
    - Authorized redirect URIs:
      - `https://stock-googles.vercel.app/api/auth/google/callback`
      - `http://localhost:3000/api/auth/google/callback`
-4. Copy the **Client ID** and **Client secret** into `GOOGLE_CLIENT_ID` and `GOOGLE_CLIENT_SECRET`.
+5. Copy the **Client ID** and **Client secret** into `GOOGLE_CLIENT_ID` and `GOOGLE_CLIENT_SECRET`.
 
 > While the consent screen is in **Testing**, only listed test users can sign in. Publishing the app (with the non-sensitive scopes above) is what allows any `@gmail.com` account to complete the second gate.
 
@@ -101,6 +108,8 @@ There is no official shared client to reuse; each deployment needs its own OAuth
 | `GOOGLE_AUTH_MOCK` | Leave unset in production. |
 
 Set these in Vercel → **Settings → Environment Variables** and redeploy. Middleware env vars are read at build time.
+
+The `/privacy` page is intentionally public (no password or Google session) so Google reviewers and visitors can read it. Set `NEXT_PUBLIC_CONTACT_EMAIL` to your support address; update the policy if the app's data practices change.
 
 ### Local development without a Google client
 

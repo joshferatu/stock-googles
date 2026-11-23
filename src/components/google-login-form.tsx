@@ -150,6 +150,12 @@ export function GoogleLoginForm({
             <ArrowLeft className="size-3" />
             Back to password
           </Link>
+          <Link
+            href="/privacy"
+            className="mt-2 block text-center text-[10px] text-muted transition hover:text-fg"
+          >
+            Privacy policy
+          </Link>
         </div>
       </div>
     </div>

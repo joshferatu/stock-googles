@@ -1,6 +1,7 @@
 "use client";
 
 import { Download, LogOut, Trash2, Upload } from "lucide-react";
+import Link from "next/link";
 import { useRef, useState } from "react";
 
 import { PrivateAlphaBadge } from "@/components/private-alpha-badge";
@@ -198,6 +199,9 @@ export function SettingsDialog({
               from open.er-api.com (with a Frankfurter fallback). Data may be delayed by 15–20 minutes and is provided
               for information only, not investment advice.
             </p>
+            <Link href="/privacy" className="mt-2 inline-block text-accent hover:underline">
+              Privacy policy
+            </Link>
           </div>
         </div>
       </DialogContent>
