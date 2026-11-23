@@ -115,7 +115,7 @@ export function FavoritesSummary() {
               </button>
             </Card>
           ) : null}
-          <div className="stagger grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
+          <div className="stagger grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-3">
             {visible.map((favorite) => (
               <FavoriteCard
                 key={favorite.symbol}
@@ -160,7 +160,7 @@ function FavoriteCard({
   return (
     <div
       onMouseEnter={onHover}
-      className="group relative overflow-hidden rounded-2xl border border-border bg-surface/70 p-4 backdrop-blur-sm transition duration-200 hover:-translate-y-0.5 hover:border-border-strong hover:bg-surface hover:shadow-[0_18px_40px_-30px_rgba(0,0,0,0.9)]"
+      className="group relative min-w-0 overflow-hidden rounded-2xl border border-border bg-surface/70 p-4 backdrop-blur-sm transition duration-200 hover:-translate-y-0.5 hover:border-border-strong hover:bg-surface hover:shadow-[0_18px_40px_-30px_rgba(0,0,0,0.9)]"
     >
       <Link
         href={`/stock/${encodeURIComponent(favorite.symbol)}`}
@@ -250,7 +250,7 @@ function EmptyWatchlist() {
 
 function WatchlistSkeleton() {
   return (
-    <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
+    <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-3">
       {Array.from({ length: 3 }).map((_, index) => (
         <Card key={index} className="p-4">
           <div className="flex items-center gap-2.5">

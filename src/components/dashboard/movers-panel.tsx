@@ -32,7 +32,7 @@ export function MoversPanel() {
   const rows = tab === "gainers" ? (data?.gainers ?? []) : (data?.losers ?? []);
 
   return (
-    <Card className="flex flex-col p-4 sm:p-5">
+    <Card className="flex min-w-0 flex-col p-4 sm:p-5">
       <SectionHeader
         icon={tab === "gainers" ? <TrendingUp className="size-4" /> : <TrendingDown className="size-4" />}
         title="Market movers"
@@ -40,7 +40,7 @@ export function MoversPanel() {
         action={<Segmented options={TABS} value={tab} onChange={setTab} size="sm" ariaLabel="Movers direction" />}
       />
 
-      <div className="min-h-0 flex-1">
+      <div className="min-h-0 min-w-0 flex-1">
         {isPending ? (
           <div className="space-y-2 pt-1">
             {Array.from({ length: 6 }).map((_, index) => (
@@ -113,12 +113,12 @@ function MoverRow({
         <Avatar size="sm" symbol={quote.symbol} name={quote.name} />
         <div className="min-w-0 flex-1">
           <p className="truncate text-[13px] font-medium leading-tight">{quote.name}</p>
-          <p className="mt-0.5 flex items-center gap-1 font-mono text-[10px] text-muted">
-            {quote.symbol}
-            {quote.exchange ? <span className="hidden sm:inline">· {quote.exchange}</span> : null}
+          <p className="mt-0.5 flex min-w-0 items-center gap-1 font-mono text-[10px] text-muted">
+            <span className="truncate">{quote.symbol}</span>
+            {quote.exchange ? <span className="hidden truncate sm:inline">· {quote.exchange}</span> : null}
           </p>
         </div>
-        <div className="flex shrink-0 flex-col items-end gap-0.5">
+        <div className="flex min-w-0 shrink-0 flex-col items-end gap-0.5">
           <span className="tnum font-mono text-xs font-medium">{price}</span>
           <span className={cn("flex items-center gap-0.5 text-[10px]", positive ? "text-up" : "text-down")}>
             {positive ? <ArrowUpRight className="size-3" /> : <ArrowDownRight className="size-3" />}

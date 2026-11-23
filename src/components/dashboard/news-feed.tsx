@@ -60,7 +60,7 @@ export function NewsFeed({
     tabs && tab === "for-you" && favoriteSymbols.length > 0 && !isPending && items.length === 0;
 
   return (
-    <Card className={cn("flex flex-col p-4 sm:p-5", className)}>
+    <Card className={cn("flex min-w-0 flex-col p-4 sm:p-5", className)}>
       <SectionHeader
         icon={<Newspaper className="size-4" />}
         title={title}
@@ -78,7 +78,7 @@ export function NewsFeed({
         }
       />
 
-      <div className="min-h-0 flex-1">
+      <div className="min-h-0 min-w-0 flex-1">
         {isPending && !data ? (
           <div className="space-y-3 pt-1">
             {Array.from({ length: 5 }).map((_, index) => (
@@ -135,8 +135,8 @@ function NewsRow({ item, favorites }: { item: NewsItem; favorites: Set<string> }
           <p className="line-clamp-2 text-[13px] font-medium leading-snug transition group-hover:text-accent">
             {item.title}
           </p>
-          <div className="mt-1 flex flex-wrap items-center gap-x-1.5 gap-y-1 text-[10px] text-muted">
-            <span className="truncate">{item.publisher}</span>
+          <div className="mt-1 flex min-w-0 flex-wrap items-center gap-x-1.5 gap-y-1 text-[10px] text-muted">
+            <span className="min-w-0 truncate">{item.publisher}</span>
             <span>·</span>
             <span>{formatRelativeTime(item.publishedAt)}</span>
             {tickers.map((ticker) => (

@@ -150,16 +150,16 @@ export function AppShell({ children }: { children: React.ReactNode }) {
             </div>
           </header>
 
-          <main className="relative mx-auto w-full max-w-[1240px] flex-1 px-4 pb-28 pt-5 lg:px-8 lg:pb-12 lg:pt-7">
+          <main className="relative mx-auto w-full min-w-0 max-w-[1240px] flex-1 px-4 pb-28 pt-5 lg:px-8 lg:pb-12 lg:pt-7">
             {children}
           </main>
 
           {/* Mobile bottom navigation */}
           <nav
             aria-label="Main navigation"
-            className="fixed inset-x-0 bottom-0 z-30 border-t border-border bg-surface/85 pb-[env(safe-area-inset-bottom)] backdrop-blur-xl lg:hidden"
+            className="fixed inset-x-0 bottom-0 z-30 w-full border-t border-border bg-surface/85 pb-[env(safe-area-inset-bottom)] backdrop-blur-xl lg:hidden"
           >
-            <div className="mx-auto grid max-w-md grid-cols-3">
+            <div className="mx-auto grid w-full max-w-md grid-cols-3">
               {NAV.map((item) => {
                 const Icon = item.icon;
                 const active = isActive(item.href);
@@ -168,7 +168,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
                     key={item.href}
                     href={item.href}
                     className={cn(
-                      "relative flex flex-col items-center gap-1 py-2.5 text-[10px] font-medium transition",
+                      "relative flex min-w-0 flex-col items-center gap-1 py-2.5 text-[10px] font-medium transition",
                       active ? "text-accent" : "text-muted",
                     )}
                   >

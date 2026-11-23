@@ -63,6 +63,9 @@
 
   html {
     color-scheme: light;
+    /* A wide price, symbol or headline must never create a horizontal page
+       scroll on mobile: clip instead of hidden so sticky/fixed keep working. */
+    overflow-x: clip;
     -webkit-tap-highlight-color: transparent;
     scroll-behavior: smooth;
   }
