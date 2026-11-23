@@ -1,33 +1,75 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512">
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 1024" width="1024" height="1024">
   <defs>
-    <linearGradient id="bg" x1="0" y1="0" x2="0.4" y2="1">
-      <stop offset="0" stop-color="#0b131b"/>
-      <stop offset="1" stop-color="#03120e"/>
+    
+    <linearGradient id="goldGrad" x1="15%" y1="15%" x2="85%" y2="85%">
+      <stop offset="0%" stop-color="#F6D365" />
+      <stop offset="45%" stop-color="#E5A93C" />
+      <stop offset="100%" stop-color="#B87D1E" />
     </linearGradient>
-    <linearGradient id="bars" x1="0" y1="1" x2="0.8" y2="0">
-      <stop offset="0" stop-color="#14b8a6"/>
-      <stop offset="1" stop-color="#4ade80"/>
-    </linearGradient>
-    <radialGradient id="glow" cx="0.28" cy="0.18" r="0.85">
-      <stop stop-color="#2dd4bf" stop-opacity="0.32"/>
-      <stop offset="1" stop-color="#2dd4bf" stop-opacity="0"/>
-    </radialGradient>
+
+    
+    <clipPath id="emblemClip">
+      <circle cx="512" cy="435" r="248" />
+    </clipPath>
   </defs>
-  <rect width="512" height="512" rx="116" fill="url(#bg)"/>
-  <rect width="512" height="512" rx="116" fill="url(#glow)"/>
-  <g stroke="#ffffff" stroke-opacity="0.045" stroke-width="2">
-    <path d="M88 168H424M88 248H424M88 328H424M88 408H424"/>
+
+  
+  <rect width="1024" height="1024" rx="220" fill="#0F1E36" />
+
+  
+  <circle cx="512" cy="435" r="268" fill="none" stroke="url(#goldGrad)" stroke-width="18" />
+
+  
+  <g clip-path="url(#emblemClip)">
+    
+    <g fill="url(#goldGrad)" opacity="0.9">
+      <rect x="372" y="295" width="26" height="45" rx="3" />
+      <rect x="414" y="265" width="26" height="75" rx="3" />
+      <rect x="456" y="240" width="26" height="100" rx="3" />
+      <rect x="498" y="215" width="26" height="125" rx="3" />
+      <rect x="540" y="195" width="26" height="145" rx="3" />
+    </g>
+
+    
+    <g fill="url(#goldGrad)">
+      <rect x="365" y="575" width="28" height="115" rx="3" />
+      <rect x="415" y="545" width="28" height="145" rx="3" />
+      <rect x="465" y="510" width="28" height="180" rx="3" />
+      <rect x="515" y="535" width="28" height="155" rx="3" />
+      <rect x="565" y="565" width="28" height="125" rx="3" />
+      <rect x="615" y="595" width="28" height="95" rx="3" />
+    </g>
+
+    
+    <g stroke="#0F1E36" stroke-width="34" stroke-linecap="round" stroke-linejoin="round" fill="none">
+      <circle cx="405" cy="445" r="78" />
+      <circle cx="619" cy="445" r="78" />
+      <path d="M 483 435 Q 512 412 541 435" />
+      <polyline points="265,565 375,455 415,485 495,390 540,425 685,275" />
+    </g>
+
+    
+    <g stroke="url(#goldGrad)" stroke-width="18" stroke-linecap="round" stroke-linejoin="round" fill="none">
+      
+      <circle cx="405" cy="445" r="78" />
+      <circle cx="619" cy="445" r="78" />
+      
+      <path d="M 483 435 Q 512 412 541 435" />
+      
+      <path d="M 304 425 L 327 425 L 327 465 L 304 465 Z" fill="url(#goldGrad)" stroke="none" />
+      <path d="M 697 425 L 720 425 L 720 465 L 697 465 Z" fill="url(#goldGrad)" stroke="none" />
+    </g>
+
+    
+    <path d="M 656 420 A 44 44 0 1 0 662 452 L 622 452" fill="none" stroke="url(#goldGrad)" stroke-width="18" stroke-linecap="round" stroke-linejoin="round" />
+
+    
+    <polyline points="265,565 375,455 415,485 495,390 540,425 685,275" fill="none" stroke="url(#goldGrad)" stroke-width="18" stroke-linecap="round" stroke-linejoin="round" />
   </g>
-  <g fill="url(#bars)">
-    <rect x="116" y="300" width="46" height="112" rx="13" opacity="0.55"/>
-    <rect x="200" y="246" width="46" height="166" rx="13" opacity="0.74"/>
-    <rect x="284" y="190" width="46" height="222" rx="13" opacity="0.9"/>
-    <rect x="368" y="128" width="46" height="284" rx="13"/>
-  </g>
-  <g stroke="url(#bars)" stroke-width="9" stroke-linecap="round" opacity="0.95">
-    <path d="M139 276v36"/>
-    <path d="M223 222v36"/>
-    <path d="M307 166v36"/>
-    <path d="M391 102v38"/>
-  </g>
+
+  
+  <polygon points="712,248 652,262 698,308" fill="url(#goldGrad)" />
+
+  
+  <text x="512" y="845" font-family="-apple-system, BlinkMacSystemFont, &#39;Segoe UI&#39;, Roboto, Helvetica, Arial, sans-serif" font-size="76" font-weight="800" letter-spacing="4" fill="#FFFFFF" text-anchor="middle">STOCK GOOGLES</text>
 </svg>

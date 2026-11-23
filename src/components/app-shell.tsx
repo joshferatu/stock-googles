@@ -2,15 +2,10 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import {
-  ChartCandlestick,
-  LayoutDashboard,
-  Search,
-  Settings,
-  Star,
-} from "lucide-react";
+import { LayoutDashboard, Search, Settings, Star } from "lucide-react";
 import { useEffect, useState } from "react";
 
+import { BrandMark } from "@/components/brand-mark";
 import { CurrencySwitcher } from "@/components/currency-switcher";
 import { PrivateAlphaBadge } from "@/components/private-alpha-badge";
 import { SearchCommand } from "@/components/search/search-command";
@@ -29,11 +24,8 @@ const NAV = [
 
 function Logo({ compact = false }: { compact?: boolean }) {
   return (
-    <Link href="/" className="group flex items-center gap-2.5" aria-label="Stock Googles home">
-      <span className="relative flex size-9 items-center justify-center overflow-hidden rounded-xl bg-gradient-to-br from-accent to-accent-2 shadow-[0_6px_18px_-8px_var(--accent)]">
-        <ChartCandlestick className="size-5 text-[#04120f]" strokeWidth={2.4} />
-        <span className="absolute inset-0 bg-gradient-to-b from-white/25 to-transparent" />
-      </span>
+    <Link href="/" className="group flex min-w-0 items-center gap-2.5" aria-label="Stock Googles home">
+      <BrandMark alt="" priority />
       {compact ? null : (
         <span className="text-[15px] font-semibold tracking-tight">
           Stock <span className="bg-gradient-to-r from-accent to-accent-2 bg-clip-text text-transparent">Googles</span>

@@ -1,10 +1,11 @@
 "use client";
 
-import { ChartCandlestick, Lock } from "lucide-react";
+import { Lock } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
 
+import { BrandMark } from "@/components/brand-mark";
 import { PrivateAlphaBadge } from "@/components/private-alpha-badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -51,10 +52,7 @@ export function LoginForm({ next, sso }: { next: string; sso: boolean }) {
     <div className="flex min-h-dvh flex-col items-center justify-center px-4 py-10">
       <div className="animate-fade-up w-full max-w-sm">
         <div className="mb-8 flex flex-col items-center text-center">
-          <span className="relative flex size-12 items-center justify-center overflow-hidden rounded-2xl bg-gradient-to-br from-accent to-accent-2 shadow-[0_14px_40px_-18px_var(--accent)]">
-            <ChartCandlestick className="size-6 text-[#04120f]" strokeWidth={2.4} />
-            <span className="absolute inset-0 bg-gradient-to-b from-white/25 to-transparent" />
-          </span>
+          <BrandMark className="size-12" priority />
           <h1 className="mt-4 text-2xl font-semibold tracking-tight">
             Stock{" "}
             <span className="bg-gradient-to-r from-accent to-accent-2 bg-clip-text text-transparent">

@@ -1,0 +1,77 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 1024" width="1024" height="1024">
+  <defs>
+    
+    <linearGradient id="goldGrad" x1="15%" y1="15%" x2="85%" y2="85%">
+      <stop offset="0%" stop-color="#F6D365" />
+      <stop offset="45%" stop-color="#E5A93C" />
+      <stop offset="100%" stop-color="#B87D1E" />
+    </linearGradient>
+
+    
+    <clipPath id="emblemClip">
+      <circle cx="512" cy="435" r="248" />
+    </clipPath>
+  </defs>
+
+  
+  <rect width="1024" height="1024" rx="220" fill="#0F1E36" />
+
+  <g transform="translate(512 512) scale(1.3) translate(-512 -435)">
+
+  
+    <circle cx="512" cy="435" r="268" fill="none" stroke="url(#goldGrad)" stroke-width="18" />
+
+  
+    <g clip-path="url(#emblemClip)">
+    
+      <g fill="url(#goldGrad)" opacity="0.9">
+        <rect x="372" y="295" width="26" height="45" rx="3" />
+        <rect x="414" y="265" width="26" height="75" rx="3" />
+        <rect x="456" y="240" width="26" height="100" rx="3" />
+        <rect x="498" y="215" width="26" height="125" rx="3" />
+        <rect x="540" y="195" width="26" height="145" rx="3" />
+      </g>
+
+    
+      <g fill="url(#goldGrad)">
+        <rect x="365" y="575" width="28" height="115" rx="3" />
+        <rect x="415" y="545" width="28" height="145" rx="3" />
+        <rect x="465" y="510" width="28" height="180" rx="3" />
+        <rect x="515" y="535" width="28" height="155" rx="3" />
+        <rect x="565" y="565" width="28" height="125" rx="3" />
+        <rect x="615" y="595" width="28" height="95" rx="3" />
+      </g>
+
+    
+      <g stroke="#0F1E36" stroke-width="34" stroke-linecap="round" stroke-linejoin="round" fill="none">
+        <circle cx="405" cy="445" r="78" />
+        <circle cx="619" cy="445" r="78" />
+        <path d="M 483 435 Q 512 412 541 435" />
+        <polyline points="265,565 375,455 415,485 495,390 540,425 685,275" />
+      </g>
+
+    
+      <g stroke="url(#goldGrad)" stroke-width="18" stroke-linecap="round" stroke-linejoin="round" fill="none">
+      
+        <circle cx="405" cy="445" r="78" />
+        <circle cx="619" cy="445" r="78" />
+      
+        <path d="M 483 435 Q 512 412 541 435" />
+      
+        <path d="M 304 425 L 327 425 L 327 465 L 304 465 Z" fill="url(#goldGrad)" stroke="none" />
+        <path d="M 697 425 L 720 425 L 720 465 L 697 465 Z" fill="url(#goldGrad)" stroke="none" />
+      </g>
+
+    
+      <path d="M 656 420 A 44 44 0 1 0 662 452 L 622 452" fill="none" stroke="url(#goldGrad)" stroke-width="18" stroke-linecap="round" stroke-linejoin="round" />
+
+    
+      <polyline points="265,565 375,455 415,485 495,390 540,425 685,275" fill="none" stroke="url(#goldGrad)" stroke-width="18" stroke-linecap="round" stroke-linejoin="round" />
+    </g>
+
+  
+    <polygon points="712,248 652,262 698,308" fill="url(#goldGrad)" />
+
+  
+  </g>
+</svg>

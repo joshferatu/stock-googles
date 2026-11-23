@@ -156,7 +156,7 @@ Data flow: browser → TanStack Query hook (`src/lib/queries.ts`) → `/api/*` r
 - **Change the Google policy:** the domain allowlist lives in `googleAuthConfig()` (`GOOGLE_ALLOWED_DOMAIN`, default `gmail.com`); email verification happens in the callback. Do not trust a client-supplied email.
 - **Add another auth method:** issue the same `sg_session` payload through `createSessionToken` after verifying the identity; the middleware does not need to know the provider.
 - **Data practices change:** update `src/app/privacy/page.tsx` (and its "Last updated" date) whenever collection, processors, cookies or retention change. It is the URL submitted to Google.
-- **Icons:** edit the SVGs, then `npm run icons`.
+- **Icons:** `public/icons/icon.svg` is the full logo (app icons + `src/app/icon.png`); `emblem.svg` is the wordmark-free mark used in the UI; the maskable and Apple touch variants are composed from `icon.svg` on a full-bleed square. Edit the SVGs, then `npm run icons`.
 
 ## Do not
 
