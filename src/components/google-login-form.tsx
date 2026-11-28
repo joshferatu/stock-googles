@@ -1,6 +1,5 @@
 "use client";
 
-import { ArrowLeft } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
@@ -91,7 +90,7 @@ export function GoogleLoginForm({
 
         <div className="rounded-2xl border border-border bg-surface/70 p-5 shadow-xl backdrop-blur">
           <p className="text-[10px] font-semibold uppercase tracking-[0.14em] text-muted">
-            Step 2 of 2 · Google account
+            Google account
           </p>
           <p className="mt-2 text-[11px] leading-relaxed text-muted">
             Sign in with the Google account you want shown in Settings. Only{" "}
@@ -139,18 +138,12 @@ export function GoogleLoginForm({
           )}
 
           <p className="mt-3 text-center text-[10px] leading-relaxed text-muted/80">
-            The Google account identifies you; it is not used to fetch market data.
+            The Google account identifies you and owns your favourites and preferences; it is not used to fetch
+            market data.
           </p>
           <Link
-            href="/login"
-            className="mt-4 flex items-center justify-center gap-1 text-[11px] text-muted transition hover:text-fg"
-          >
-            <ArrowLeft className="size-3" />
-            Back to password
-          </Link>
-          <Link
             href="/privacy"
-            className="mt-2 block text-center text-[10px] text-muted transition hover:text-fg"
+            className="mt-4 block text-center text-[10px] text-muted transition hover:text-fg"
           >
             Privacy policy
           </Link>

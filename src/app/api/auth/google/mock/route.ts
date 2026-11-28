@@ -2,14 +2,11 @@ import { NextResponse, type NextRequest } from "next/server";
 
 import {
   authConfig,
-  cookieOptions,
   createSessionToken,
-  GATE_COOKIE,
   isAllowedGoogleEmail,
   safeNextPath,
   SESSION_COOKIE,
   sessionCookieOptions,
-  verifyGateToken,
 } from "@/lib/session";
 
 export const dynamic = "force-dynamic";
@@ -26,16 +23,6 @@ export async function POST(request: NextRequest) {
   }
   if (!config.secret) {
     return NextResponse.json({ error: "Auth is not configured." }, { status: 500 });
-  }
-
-  if (config.passwordGate) {
-    const gate = await verifyGateToken(
-      request.cookies.get(GATE_COOKIE)?.value,
-      config.secret,
-    );
-    if (!gate) {
-      return NextResponse.json({ error: "Password step required." }, { status: 401 });
-    }
   }
 
   const body = (await request.json().catch(() => null)) as {
@@ -57,6 +44,5 @@ export async function POST(request: NextRequest) {
   });
   const response = NextResponse.json({ ok: true, email, next });
   response.cookies.set(SESSION_COOKIE, token, sessionCookieOptions());
-  response.cookies.set(GATE_COOKIE, "", { ...cookieOptions(0), maxAge: 0 });
   return response;
 }

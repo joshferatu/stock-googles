@@ -6,12 +6,10 @@ import {
   cookieOptions,
   createOAuthStateToken,
   createPkcePair,
-  GATE_COOKIE,
   OAUTH_COOKIE,
   OAUTH_MAX_AGE_SECONDS,
   randomToken,
   safeNextPath,
-  verifyGateToken,
 } from "@/lib/session";
 
 export const dynamic = "force-dynamic";
@@ -27,14 +25,6 @@ export async function GET(request: NextRequest) {
   const config = authConfig();
   if (!config.google.enabled || !config.secret) {
     return loginRedirect(request, "config");
-  }
-
-  if (config.passwordGate) {
-    const gate = await verifyGateToken(
-      request.cookies.get(GATE_COOKIE)?.value,
-      config.secret,
-    );
-    if (!gate) return NextResponse.redirect(new URL("/login", request.url));
   }
 
   const state = randomToken(24);

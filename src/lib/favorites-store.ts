@@ -3,17 +3,10 @@
 import { create } from "zustand";
 import { createJSONStorage, persist, type StateStorage } from "zustand/middleware";
 
-import type { QuoteType } from "@/lib/types";
+import { parseFavorites, type Favorite, type FavoriteInput } from "@/lib/user-state";
 
-export interface Favorite {
-  symbol: string;
-  name: string;
-  exchange: string | null;
-  quoteType: QuoteType;
-  addedAt: number;
-}
-
-export type FavoriteInput = Omit<Favorite, "addedAt"> & { addedAt?: number };
+export type { Favorite, FavoriteInput };
+export { parseFavorites };
 
 interface FavoritesState {
   favorites: Favorite[];
@@ -22,6 +15,8 @@ interface FavoritesState {
   toggleFavorite: (favorite: FavoriteInput) => void;
   clearFavorites: () => void;
   importFavorites: (items: unknown) => number;
+  /** Replaces the list with state loaded from the server. */
+  setFavorites: (favorites: Favorite[]) => void;
 }
 
 const noopStorage: StateStorage = {
@@ -30,9 +25,11 @@ const noopStorage: StateStorage = {
   removeItem: () => undefined,
 };
 
+/**
+ * Local cache of the watchlist. The database (`/api/user/state`) is the source
+ * of truth; this store keeps mutations instant and the UI readable offline.
+ */
 export const FAVORITES_STORAGE_KEY = "sg:favorites:v1";
-
-const QUOTE_TYPES: QuoteType[] = ["EQUITY", "ETF", "INDEX", "MUTUALFUND", "OTHER"];
 
 export const useFavorites = create<FavoritesState>()(
   persist(
@@ -68,6 +65,7 @@ export const useFavorites = create<FavoritesState>()(
         set({ favorites });
         return parsed.length;
       },
+      setFavorites: (favorites) => set({ favorites }),
     }),
     {
       name: FAVORITES_STORAGE_KEY,
@@ -83,30 +81,6 @@ export const useFavorites = create<FavoritesState>()(
     },
   ),
 );
-
-export function parseFavorites(value: unknown): Favorite[] {
-  if (!Array.isArray(value)) return [];
-  const out: Favorite[] = [];
-  const seen = new Set<string>();
-  for (const raw of value) {
-    if (!raw || typeof raw !== "object") continue;
-    const item = raw as Record<string, unknown>;
-    const symbol = typeof item.symbol === "string" ? item.symbol.trim() : "";
-    if (!symbol || seen.has(symbol)) continue;
-    seen.add(symbol);
-    out.push({
-      symbol,
-      name: typeof item.name === "string" && item.name.trim() ? item.name : symbol,
-      exchange: typeof item.exchange === "string" ? item.exchange : null,
-      quoteType: QUOTE_TYPES.includes(item.quoteType as QuoteType)
-        ? (item.quoteType as QuoteType)
-        : "EQUITY",
-      addedAt:
-        typeof item.addedAt === "number" && Number.isFinite(item.addedAt) ? item.addedAt : Date.now(),
-    });
-  }
-  return out;
-}
 
 /** Selector-friendly helpers. */
 export const selectFavorites = (state: FavoritesState) => state.favorites;

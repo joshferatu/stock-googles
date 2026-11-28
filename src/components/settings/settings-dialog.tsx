@@ -20,6 +20,7 @@ import { useInstallPrompt } from "@/lib/install";
 import { useSessionInfo } from "@/lib/queries";
 import { useSettings, type Theme } from "@/lib/settings-store";
 import { toast } from "@/lib/toast-store";
+import { clearLocalUserData } from "@/lib/user-state-sync";
 
 const THEME_OPTIONS = [
   { value: "dark", label: "Dark" },
@@ -70,6 +71,7 @@ export function SettingsDialog({
     setSigningOut(true);
     try {
       await fetch("/api/auth/logout", { method: "POST" });
+      clearLocalUserData();
       window.location.assign("/login");
     } catch {
       setSigningOut(false);
@@ -83,7 +85,7 @@ export function SettingsDialog({
         <div className="border-b border-border px-5 py-4">
           <DialogTitle>Settings</DialogTitle>
           <DialogDescription className="mt-0.5">
-            Preferences and favourites are stored in this browser only.
+            Preferences and favourites are saved to your account.
           </DialogDescription>
         </div>
 
@@ -110,7 +112,7 @@ export function SettingsDialog({
 
           <SettingRow
             label="Favourites"
-            description={`${favorites.length} saved in this browser · export to move devices`}
+            description={`${favorites.length} saved to your account · export keeps a backup`}
           >
             <div className="flex flex-wrap items-center justify-end gap-1.5">
               <Button
@@ -196,7 +198,7 @@ export function SettingsDialog({
               description={
                 session.email
                   ? `Signed in with Google${session.mode === "mock" ? " (local mock)" : ""}`
-                  : "Shared password session"
+                  : "Signed in"
               }
             >
               <div className="flex flex-wrap items-center justify-end gap-2">

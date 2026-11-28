@@ -18,11 +18,10 @@ export default defineConfig({
   webServer: {
     // A production build removes on-demand compilation from the test timings.
     command: "npm run build && npm run start -- --port 3100",
-    url: "http://127.0.0.1:3100/login",
+    url: "http://127.0.0.1:3100/login/google",
     reuseExistingServer: false,
     timeout: 300_000,
     env: {
-      AUTH_PASSWORD: "test-pass",
       AUTH_SECRET: "test-secret",
       GOOGLE_AUTH_MOCK: "1",
       GOOGLE_ALLOWED_DOMAIN: "gmail.com",

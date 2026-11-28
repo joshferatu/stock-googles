@@ -18,7 +18,7 @@ export default function PrivacyPage() {
           Stock <span className="text-accent">Googles</span>
         </Link>
         <h1 className="mt-4 text-3xl font-semibold tracking-tight">Privacy Policy</h1>
-        <p className="mt-2 text-xs text-muted">Last updated: 22 November 2026</p>
+        <p className="mt-2 text-xs text-muted">Last updated: 28 November 2026</p>
         <PrivateAlphaBadge className="mt-3 justify-start" withCopy />
       </header>
 
@@ -45,23 +45,25 @@ export default function PrivacyPage() {
             </li>
             <li>
               <strong className="text-fg">Session data.</strong> A signed, HttpOnly cookie stores your verified
-              email and the session expiry so you stay signed in for up to 30 days. Short-lived cookies carry
-              the password gate and the Google OAuth state/PKCE handshake.
+              email and the session expiry so you stay signed in for up to 30 days. A short-lived cookie carries
+              the Google OAuth state/PKCE handshake.
             </li>
             <li>
               <strong className="text-fg">Favourites and preferences.</strong> Your watchlist, theme, display
-              currency, recent searches and cached market responses are stored in your browser&apos;s{" "}
-              <code className="rounded bg-surface-2 px-1 py-0.5 text-[11px]">localStorage</code>, not in a
-              server database.
+              currency and recent searches are stored in a Postgres database (Neon) operated by this deployment,
+              keyed by your Google email address, so they follow you between browsers and devices. A copy is
+              cached in your browser&apos;s{" "}
+              <code className="rounded bg-surface-2 px-1 py-0.5 text-[11px]">localStorage</code> so the app opens
+              instantly and still works offline.
+            </li>
+            <li>
+              <strong className="text-fg">Market data cache.</strong> Quotes, charts and headlines are cached in
+              your browser to avoid repeat requests. They contain no personal data.
             </li>
             <li>
               <strong className="text-fg">Technical logs.</strong> Our hosting provider (Vercel) processes
               standard request logs such as IP address, user agent, timestamp and requested URL for security
               and reliability.
-            </li>
-            <li>
-              <strong className="text-fg">Shared password.</strong> The password you enter is compared on the
-              server against a deployment environment variable. The app does not store your password.
             </li>
           </ul>
           <p className="mt-3">
@@ -87,35 +89,33 @@ export default function PrivacyPage() {
                   <td className="px-3 py-2">30 days</td>
                 </tr>
                 <tr>
-                  <td className="px-3 py-2 font-mono text-[11px] text-fg">sg_gate</td>
-                  <td className="px-3 py-2">Proves the shared-password step while you complete Google sign-in.</td>
-                  <td className="px-3 py-2">15 minutes</td>
-                </tr>
-                <tr>
                   <td className="px-3 py-2 font-mono text-[11px] text-fg">sg_oauth</td>
                   <td className="px-3 py-2">Protects the Google OAuth state and PKCE handshake.</td>
                   <td className="px-3 py-2">10 minutes</td>
                 </tr>
                 <tr>
                   <td className="px-3 py-2 font-mono text-[11px] text-fg">localStorage</td>
-                  <td className="px-3 py-2">Favourites, theme, currency, recent searches, cached market data.</td>
+                  <td className="px-3 py-2">
+                    Cache of your favourites, theme, currency and recent searches, plus cached market data. The
+                    authoritative copy is in the database.
+                  </td>
                   <td className="px-3 py-2">Until you clear it</td>
                 </tr>
               </tbody>
             </table>
           </div>
           <p className="mt-3">
-            These cookies are required for authentication and are not used for advertising. You can remove them
-            through your browser settings; this signs you out and deletes locally stored favourites.
+            These cookies are required for authentication and are not used for advertising. Clearing them signs
+            you out; your favourites and preferences remain in the database and come back on your next sign-in.
           </p>
         </section>
 
         <section>
           <h2 className="mb-2 text-sm font-semibold text-fg">4. How we use data</h2>
           <ul className="list-disc space-y-1.5 pl-5">
-            <li>Authenticate you and enforce the shared-password + Google sign-in gates.</li>
+            <li>Authenticate you with Google and keep you signed in.</li>
             <li>Show the signed-in email in Settings.</li>
-            <li>Remember your favourites and display preferences in your browser.</li>
+            <li>Store your favourites, display preferences and recent searches and sync them to your account.</li>
             <li>Operate, secure, debug and improve the service.</li>
           </ul>
           <p className="mt-3">
@@ -135,6 +135,10 @@ export default function PrivacyPage() {
             <li>
               <strong className="text-fg">Google</strong> — OAuth sign-in and the basic profile/email returned
               by Google.
+            </li>
+            <li>
+              <strong className="text-fg">Neon</strong> — the Postgres database that stores your favourites,
+              preferences and recent searches, keyed by your Google email address.
             </li>
             <li>
               <strong className="text-fg">Market-data providers</strong> — Yahoo Finance, CNBC, StockAnalysis,
@@ -167,10 +171,13 @@ export default function PrivacyPage() {
         <section>
           <h2 className="mb-2 text-sm font-semibold text-fg">6. Retention</h2>
           <ul className="list-disc space-y-1.5 pl-5">
-            <li>Session cookie: up to 30 days; password gate: 15 minutes; OAuth state: 10 minutes.</li>
-            <li>Favourites, preferences and cached market data: until you clear your browser storage.</li>
-            <li>Hosting logs: according to Vercel&apos;s retention settings.</li>
-            <li>The app does not operate a database and does not store Google access or refresh tokens.</li>
+            <li>Session cookie: up to 30 days; OAuth state: 10 minutes.</li>
+            <li>
+              Favourites, preferences and recent searches: until you ask us to delete them or the deployment is
+              retired. The browser cache can be cleared at any time and is rebuilt from the database.
+            </li>
+            <li>Hosting and database logs: according to Vercel&apos;s and Neon&apos;s retention settings.</li>
+            <li>The app does not store Google access or refresh tokens.</li>
           </ul>
         </section>
 
@@ -178,7 +185,9 @@ export default function PrivacyPage() {
           <h2 className="mb-2 text-sm font-semibold text-fg">7. Security</h2>
           <p>
             The app is served over HTTPS. Session and OAuth cookies are HttpOnly, SameSite=Lax and Secure in
-            production, and tokens are signed with HMAC-SHA256. No method of transmission or storage is
+            production, and tokens are signed with HMAC-SHA256. The database connection string is a server-side
+            environment variable and is never exposed to the browser; per-user rows are read only for the
+            signed-in email. No method of transmission or storage is
             completely secure, so we cannot guarantee absolute security.
           </p>
         </section>
@@ -186,8 +195,12 @@ export default function PrivacyPage() {
         <section>
           <h2 className="mb-2 text-sm font-semibold text-fg">8. Your choices and rights</h2>
           <ul className="list-disc space-y-1.5 pl-5">
-            <li>Sign out at any time from Settings; this clears the local session.</li>
-            <li>Clear cookies and site data in your browser to remove locally stored favourites and preferences.</li>
+            <li>Sign out at any time from Settings; this clears the session cookie.</li>
+            <li>
+              Ask us to delete your stored favourites, preferences and recent searches; because they are keyed by
+              your email address, that removes the account&apos;s row from the database.
+            </li>
+            <li>Clear cookies and site data in your browser to remove the local cache.</li>
             <li>
               Depending on your jurisdiction (for example the EEA, UK or California), you may have rights to
               access, correct, delete or restrict processing of personal data, or to object to processing.

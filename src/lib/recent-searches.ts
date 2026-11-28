@@ -1,51 +1,71 @@
 "use client";
 
-import type { QuoteType } from "@/lib/types";
+import { create } from "zustand";
+import { createJSONStorage, persist, type StateStorage } from "zustand/middleware";
 
-export interface RecentSearch {
-  symbol: string;
-  name: string;
-  exchangeName: string | null;
-  quoteType: QuoteType;
+import {
+  parseRecentSearches,
+  RECENT_SEARCH_LIMIT,
+  type RecentSearch,
+} from "@/lib/user-state";
+
+export type { RecentSearch };
+
+export const RECENT_SEARCHES_STORAGE_KEY = "sg:recent-searches:v1";
+
+interface RecentSearchesState {
+  items: RecentSearch[];
+  add: (item: RecentSearch) => void;
+  clear: () => void;
+  /** Replaces the list with state loaded from the server. */
+  replaceAll: (items: RecentSearch[]) => void;
 }
 
-const KEY = "sg:recent-searches:v1";
-const LIMIT = 8;
+const noopStorage: StateStorage = {
+  getItem: () => null,
+  setItem: () => undefined,
+  removeItem: () => undefined,
+};
+
+/** Local cache of recent searches; the database is the source of truth. */
+export const useRecentSearches = create<RecentSearchesState>()(
+  persist(
+    (set, get) => ({
+      items: [],
+      add: (item) => {
+        const next = [item, ...get().items.filter((entry) => entry.symbol !== item.symbol)].slice(
+          0,
+          RECENT_SEARCH_LIMIT,
+        );
+        set({ items: next });
+      },
+      clear: () => set({ items: [] }),
+      replaceAll: (items) => set({ items }),
+    }),
+    {
+      name: RECENT_SEARCHES_STORAGE_KEY,
+      version: 1,
+      storage: createJSONStorage(() => (typeof window === "undefined" ? noopStorage : window.localStorage)),
+      partialize: (state) => ({ items: state.items }),
+      // The pre-database format was a bare array under the same key.
+      merge: (persisted, current) => {
+        const raw = persisted as { items?: unknown } | unknown[] | undefined;
+        const items = Array.isArray(raw) ? raw : (raw as { items?: unknown } | undefined)?.items;
+        return { ...current, items: parseRecentSearches(items) };
+      },
+    },
+  ),
+);
 
 export function getRecentSearches(): RecentSearch[] {
-  if (typeof window === "undefined") return [];
-  try {
-    const raw = window.localStorage.getItem(KEY);
-    if (!raw) return [];
-    const parsed = JSON.parse(raw) as unknown;
-    if (!Array.isArray(parsed)) return [];
-    return parsed
-      .filter(
-        (item): item is RecentSearch =>
-          Boolean(item) &&
-          typeof (item as RecentSearch).symbol === "string" &&
-          typeof (item as RecentSearch).name === "string",
-      )
-      .slice(0, LIMIT);
-  } catch {
-    return [];
-  }
+  return useRecentSearches.getState().items;
 }
 
 export function addRecentSearch(item: RecentSearch): RecentSearch[] {
-  const next = [item, ...getRecentSearches().filter((entry) => entry.symbol !== item.symbol)].slice(0, LIMIT);
-  try {
-    window.localStorage.setItem(KEY, JSON.stringify(next));
-  } catch {
-    // Storage full or blocked: recents are a convenience.
-  }
-  return next;
+  useRecentSearches.getState().add(item);
+  return getRecentSearches();
 }
 
 export function clearRecentSearches(): void {
-  try {
-    window.localStorage.removeItem(KEY);
-  } catch {
-    // ignore
-  }
+  useRecentSearches.getState().clear();
 }

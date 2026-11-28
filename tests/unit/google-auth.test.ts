@@ -12,9 +12,7 @@ import {
   GoogleAuthError,
 } from "@/lib/google";
 import {
-  createGateToken,
   createOAuthStateToken,
-  GATE_COOKIE,
   OAUTH_COOKIE,
   SESSION_COOKIE,
   verifySessionToken,
@@ -23,7 +21,6 @@ import {
 const ORIGINAL_ENV = { ...process.env };
 
 function setGoogleEnv() {
-  process.env.AUTH_PASSWORD = "correct-horse";
   process.env.AUTH_SECRET = "test-secret";
   process.env.GOOGLE_CLIENT_ID = "client-id";
   process.env.GOOGLE_CLIENT_SECRET = "client-secret";
@@ -212,13 +209,9 @@ describe("POST /api/auth/google/mock", () => {
   });
 
   async function mockRequest(email: string) {
-    const gate = await createGateToken("test-secret");
     return new NextRequest("http://localhost/api/auth/google/mock", {
       method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        cookie: `${GATE_COOKIE}=${encodeURIComponent(gate)}`,
-      },
+      headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ email, next: "/favorites" }),
     });
   }

@@ -1,6 +1,6 @@
 # Stock Googles
 
-A fast, installable market dashboard for a handful of people. Search any listed company or index worldwide, follow favourites, and see what moved today — no database, no accounts, no paid APIs.
+A fast, installable market dashboard for a handful of people. Search any listed company or index worldwide, follow favourites, and see what moved today — Google sign-in for identity, a Neon Postgres row per account for favourites, and no paid market-data APIs.
 
 ![Next.js](https://img.shields.io/badge/Next.js-15-000?logo=next.js)
 ![TypeScript](https://img.shields.io/badge/TypeScript-5-3178c6?logo=typescript)
@@ -12,7 +12,7 @@ A fast, installable market dashboard for a handful of people. Search any listed 
 - **Dashboard first** — your watchlist summary, biggest gainers/losers, index strip and news.
 - **Global search** — companies, ETFs and indices from every major exchange (`AAPL`, `TEF.MC`, `^IXIC`, `0700.HK`, …), with a ⌘K command palette and recent searches.
 - **Detail view** — intraday-to-all-time area chart, live quote, day/52-week ranges, volume, sector, and ticker news.
-- **Favourites** — optimistic star buttons in search, detail and movers; stored in `localStorage`; managed from a dedicated page with sorting, JSON export/import and clear.
+- **Favourites** — optimistic star buttons in search, detail and movers; saved to your account in Postgres, so they follow you between browsers and devices, with a local cache for instant paint and offline reads. Managed from a dedicated page with sorting, JSON export/import and clear.
 - **Personalised news** — "For you" mixes headlines for your favourites with market-wide stories.
 - **Currency display** — native, EUR or USD, converted with daily reference rates.
 - **Native-feeling UX** — no full reloads, skeletons, hover prefetch, background refresh, a persisted query cache and an installable PWA.
@@ -25,7 +25,8 @@ A fast, installable market dashboard for a handful of people. Search any listed 
 | UI | Tailwind CSS v4, shadcn-style local components, `lucide-react` | Small bundle, dark/light theming, no component-library weight. |
 | Data fetching | TanStack Query v5 + `localStorage` persister | Cache-sharing, background revalidation, instant reloads, prefetching. |
 | Charts | TradingView `lightweight-charts` v5 | Canvas performance and a native finance feel. |
-| State | Zustand (favourites, settings, toasts) | Tiny, hydrated synchronously from `localStorage`. |
+| State | Zustand (favourites, settings, toasts) | Tiny, hydrated synchronously from `localStorage` as a cache of the database. |
+| Database | Neon Postgres via `@neondatabase/serverless` | Per-user favourites, preferences and recent searches; HTTP driver, no TCP pool to exhaust. |
 | Validation | Zod | Route input validation. |
 | Market data | Yahoo Finance, Jina reader proxy, StockAnalysis, TradingView, CNBC, Nasdaq, Google News RSS, open.er-api.com | All keyless. See [Data sources](#data-sources). |
 | Tests | Vitest + Testing Library, Playwright | Unit/adapter coverage and browser smoke tests with mocked APIs. |
@@ -35,19 +36,23 @@ A fast, installable market dashboard for a handful of people. Search any listed 
 ```bash
 npm install
 cp .env.example .env.local   # optional
+# Paste DATABASE_URL (+ DATABASE_URL_UNPOOLED) from Vercel → Storage → Neon → .env.local.
+# `vercel env pull` cannot download them: integration secrets are encrypted.
+npm run db:migrate           # create the user_state table
 npm run dev                  # http://localhost:3000
 ```
 
-The app is open by default. For the Private Alpha flow, set `AUTH_PASSWORD`, `AUTH_SECRET` and the Google OAuth credentials (see [Authentication](#authentication-private-alpha)). Without auth env vars the app stays open.
+Google SSO is the only way in, so a working setup needs `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET` and `AUTH_SECRET` (see [Authentication](#authentication-private-alpha)). For local work without a Google client, set `GOOGLE_AUTH_MOCK=1`. With no auth env vars the app stays open but `/api/user/state` returns 401 and data stays browser-local.
 
 ### Environment variables
 
 | Variable | Required | Description |
 | --- | --- | --- |
-| `AUTH_PASSWORD` | No | First gate: shared password. Unset/empty = no password screen. |
-| `AUTH_SECRET` | Required with SSO | HMAC key for signed cookies. Defaults to a value derived from `AUTH_PASSWORD`. Generate with `openssl rand -base64 32`. |
-| `GOOGLE_CLIENT_ID` | No | OAuth client ID. With the secret, enables Google SSO as the second gate. |
-| `GOOGLE_CLIENT_SECRET` | No | OAuth client secret. |
+| `DATABASE_URL` | Yes | Neon pooled connection string, used at runtime. Injected by the Vercel Neon integration (Preview/Production only) as an encrypted variable, so copy it from the dashboard rather than `vercel env pull`. |
+| `DATABASE_URL_UNPOOLED` | For migrations | Direct connection, used by `npm run db:migrate`. |
+| `AUTH_SECRET` | Yes | HMAC key for signed cookies. Falls back to a value derived from the Google client secret. Generate with `openssl rand -base64 32`. |
+| `GOOGLE_CLIENT_ID` | Yes | OAuth client ID. |
+| `GOOGLE_CLIENT_SECRET` | Yes | OAuth client secret. |
 | `GOOGLE_ALLOWED_DOMAIN` | No | Allowed Google account domain. Defaults to `gmail.com`. |
 | `GOOGLE_AUTH_MOCK` | No | Local/E2E only: simulates Google without a client. Ignored on Vercel production. |
 | `NEXT_PUBLIC_SITE_URL` | With SSO | Canonical origin; used for the OAuth redirect URI and Open Graph metadata. |
@@ -57,17 +62,19 @@ The app is open by default. For the Private Alpha flow, set `AUTH_PASSWORD`, `AU
 
 1. Push this repository to GitHub.
 2. In Vercel, **Add New → Project** and import it. The defaults work (Next.js is detected, Node 20+).
-3. Add the auth variables in **Settings → Environment Variables**, then redeploy. Environment variables for Edge Middleware are read at build time, so set them before building.
-4. Done. No database, cron jobs or other services are needed.
+3. Add the **Neon** integration in **Storage** (Vercel injects `DATABASE_URL` and the `PG*` variables into Preview and Production).
+4. Add the auth variables in **Settings → Environment Variables**, then redeploy. Environment variables for Edge Middleware are read at build time, so set them before building.
+5. Create the `user_state` table once: run `db/schema.sql` in Neon's SQL editor (Vercel → Storage → Open in Neon), or copy `DATABASE_URL_UNPOOLED` into `.env.local` and run `npm run db:migrate`.
 
-The only runtime requirements are outbound HTTPS requests from Vercel Functions to the market-data providers, Google's OAuth endpoints and open.er-api.com.
+The runtime requirements are outbound HTTPS requests to the market-data providers, Google's OAuth endpoints and open.er-api.com, plus Neon over HTTPS. No cron jobs, queues or other services are needed.
 
 ## Authentication (Private Alpha)
 
-The app is labelled **Private Alpha — early access; data and features may change**. Access uses two gates:
+The app is labelled **Private Alpha — early access; data and features may change**. Google SSO is the only gate:
 
-1. **Shared password** (`/login`) — issues a short-lived password gate (15 minutes). The password alone does **not** grant app access when Google SSO is configured.
-2. **Google SSO** (`/login/google`) — authorization code + PKCE, verified email, gmail.com domain. Issues a 30-day session.
+- **Google SSO** (`/login/google`) — authorization code + PKCE, verified email, gmail.com domain. Issues a 30-day session whose payload carries the verified email. `/login` forwards here so the OAuth client's registered home page keeps working.
+
+There is no shared-password screen any more: an identity is required because favourites and preferences are stored per account.
 
 Settings shows the signed-in email next to **Sign out**. Sign out clears local cookies only; it does not sign out of Google. Google SSO identifies the user; it does **not** fetch market data or use Google Finance.
 
@@ -93,14 +100,14 @@ There is no official shared client to reuse; each deployment needs its own OAuth
      - `http://localhost:3000/api/auth/google/callback`
 5. Copy the **Client ID** and **Client secret** into `GOOGLE_CLIENT_ID` and `GOOGLE_CLIENT_SECRET`.
 
-> While the consent screen is in **Testing**, only listed test users can sign in. Publishing the app (with the non-sensitive scopes above) is what allows any `@gmail.com` account to complete the second gate.
+> While the consent screen is in **Testing**, only listed test users can sign in. Publishing the app (with the non-sensitive scopes above) is what allows any `@gmail.com` account to sign in.
 
 ### Environment values
 
 | Variable | Value |
 | --- | --- |
-| `AUTH_PASSWORD` | The shared first-gate password. |
 | `AUTH_SECRET` | `openssl rand -base64 32` |
+| `DATABASE_URL` | Injected by the Vercel Neon integration. |
 | `GOOGLE_CLIENT_ID` | From the OAuth client. |
 | `GOOGLE_CLIENT_SECRET` | From the OAuth client. Keep it out of git. |
 | `GOOGLE_ALLOWED_DOMAIN` | `gmail.com` (default). |
@@ -109,23 +116,39 @@ There is no official shared client to reuse; each deployment needs its own OAuth
 
 Set these in Vercel → **Settings → Environment Variables** and redeploy. Middleware env vars are read at build time.
 
-The `/privacy` page is intentionally public (no password or Google session) so Google reviewers and visitors can read it. Set `NEXT_PUBLIC_CONTACT_EMAIL` to your support address; update the policy if the app's data practices change.
+The `/privacy` page is intentionally public (no Google session) so Google reviewers and visitors can read it. Set `NEXT_PUBLIC_CONTACT_EMAIL` to your support address; update the policy if the app's data practices change.
 
 ### Local development without a Google client
 
 ```bash
-AUTH_PASSWORD=dev GOOGLE_AUTH_MOCK=1 npm run dev
+GOOGLE_AUTH_MOCK=1 npm run dev
 ```
 
-The password step works normally; `/login/google` then shows an email form instead of the Google popup. Only `@gmail.com` addresses pass. Mock mode is ignored when `VERCEL_ENV=production`, so it cannot weaken the Vercel deployment.
+`/login/google` then shows an email form instead of the Google popup. Only `@gmail.com` addresses pass. Mock mode is ignored when `VERCEL_ENV=production`, so it cannot weaken the Vercel deployment.
 
 ### Session details
 
-- Password gate: signed HttpOnly `sg_gate`, 15 minutes, cleared after SSO.
 - OAuth state + PKCE verifier: signed HttpOnly `sg_oauth`, 10 minutes, single-use.
-- Full session: signed HttpOnly `sg_session`, 30 days, contains the verified email.
-- Tokens are HMAC-SHA256 and stateless. Deploying this change invalidates older cookies; everyone re-authenticates.
-- Logout clears all three cookies locally.
+- Session: signed HttpOnly `sg_session`, 30 days, contains the verified email.
+- Tokens are HMAC-SHA256 and stateless. Sessions without an email are rejected, so legacy password-gate cookies no longer work.
+- Logout clears both cookies locally; the database row is untouched.
+
+## User data (Neon)
+
+| Where | What |
+| --- | --- |
+| `db/schema.sql` | `user_state` table: `user_id` (verified email) plus `favorites`, `preferences`, `recent_searches` JSONB and `updated_at`. |
+| `src/app/api/user/state` | `GET` returns the document (`exists: false` when no row yet); `PUT` upserts it. Both `no-store`, both require a session. |
+| `src/lib/user-state-repo.ts` | SQL reads/writes; JSON columns are normalised on the way out. |
+| `src/lib/user-state-sync.tsx` | Debounced write-through from the Zustand stores, plus boot-time reconciliation. |
+
+The database is the source of truth; `localStorage` is a cache. On boot the client does one `GET`:
+
+- no row yet, but the browser has data → the local copy is pushed (first run after the localStorage era);
+- a previous write failed (`sg:user-state:pending:v1` flag) → the local copy is pushed;
+- otherwise → the server document is applied to the stores.
+
+Writes are debounced 600 ms, last-write-wins between devices, and retried on the next change or on `online`. A failed save leaves the local copy intact, so the app keeps working offline.
 
 ## Data sources
 
@@ -159,11 +182,15 @@ src/
       favorites/           # watchlist management
       search/              # global search page
       stock/[symbol]/      # detail view
-    api/                   # thin proxy routes (search, quotes, chart, news, movers, markets, fx, auth)
-    login/                 # password gate
+    api/                   # thin proxy routes (search, quotes, chart, news, movers, markets, fx, auth, user/state)
+    login/                 # Google SSO entry
     offline/               # PWA offline fallback
   components/              # dashboard, stock, search, settings, UI primitives
   lib/
+    db.ts                  # Neon HTTP client (lazy, fails closed)
+    user-state.ts          # shared user-state types, limits and normalisers
+    user-state-repo.ts     # user_state SQL reads/writes
+    user-state-sync.tsx    # store <-> API write-through
     yahoo.ts               # primary provider adapter + normalisation
     cnbc.ts                # keyless quote fallback
     cache.ts               # in-process TTL cache, coalescing, stale-on-error
@@ -171,7 +198,7 @@ src/
     favorites-store.ts     # persisted watchlist
     settings-store.ts      # theme + display currency
     session.ts             # HMAC session tokens (edge-safe)
-  middleware.ts            # optional shared-password gate
+  middleware.ts            # Google-session gate
 ```
 
 ### Caching layers
@@ -182,7 +209,7 @@ src/
 4. **CDN** — every API response sends `s-maxage` + `stale-while-revalidate`, so Vercel's edge absorbs repeat traffic.
 5. **Service worker** — cache-first static assets and an offline navigation fallback. API responses are intentionally never cached by the SW (the app's own query cache handles offline reads).
 
-Favourites are written to `localStorage` synchronously, so the star never waits for the network; quotes hydrate in the background.
+Favourites are written to the Zustand store (and `localStorage`) synchronously, so the star never waits for the network; the debounced `PUT /api/user/state` and the quote refetch follow in the background. Per-user state is deliberately excluded from the persisted query cache and from CDN caching.
 
 ## API routes
 
@@ -195,7 +222,8 @@ Favourites are written to `localStorage` synchronously, so the star never waits 
 | `GET /api/movers` | — | 5 min edge / 8 min memory |
 | `GET /api/markets` | — | 60 s |
 | `GET /api/fx` | — | 1 h |
-| `POST /api/auth/login`, `POST /api/auth/logout`, `GET /api/auth/session` | — | no-store |
+| `GET \| PUT /api/user/state` | session cookie | no-store (per user) |
+| `POST /api/auth/logout`, `GET /api/auth/session` | — | no-store |
 | `GET /api/auth/google/start`, `GET /api/auth/google/callback`, `POST /api/auth/google/mock` | OAuth code/state | no-store |
 
 All market routes validate input with Zod and return `{ error }` with an appropriate status on failure.
@@ -203,17 +231,17 @@ All market routes validate input with Zod and return `{ error }` with an appropr
 ## Tests
 
 ```bash
-npm test            # Vitest unit tests (adapters, formats, session, cache, store)
-npm run test:e2e    # Playwright smoke tests (mocked market APIs, real auth)
+npm test            # Vitest unit tests (adapters, formats, session, user state, cache, store)
+npm run test:e2e    # Playwright smoke tests (mocked market APIs + user state, real auth)
 npm run typecheck
 npm run lint
 ```
 
-Playwright needs Chromium (`npx playwright install chromium`, or `--with-deps` on Linux CI). The e2e suite builds the app, starts a production server on port `3100` with `AUTH_PASSWORD=test-pass` and `GOOGLE_AUTH_MOCK=1`, blocks service workers and intercepts market APIs for deterministic results. The login helper walks through both gates.
+Playwright needs Chromium (`npx playwright install chromium`, or `--with-deps` on Linux CI). The e2e suite builds the app, starts a production server on port `3100` with `AUTH_SECRET=test-secret` and `GOOGLE_AUTH_MOCK=1`, blocks service workers, intercepts market APIs and stubs `/api/user/state` with an in-memory row (no database needed). The login helper completes the Google mock gate.
 
 ## Project notes
 
-- **One writer per working tree** is assumed; favourites are per browser and per origin.
+- **One writer per working tree** is assumed; favourites are per Google account and follow the user across devices.
 - The movers universe, range definitions and cache TTLs are the main tuning knobs (`src/lib/universe.ts`, `src/lib/ranges.ts`).
 - `npm run icons` regenerates PWA icons from `public/icons/*.svg`.
 - Not investment advice. Data is provided for information only.

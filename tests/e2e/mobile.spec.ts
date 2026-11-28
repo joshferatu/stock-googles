@@ -1,10 +1,10 @@
 import { expect, test } from "@playwright/test";
 
-import { login, mockMarketApi, seedFavorites } from "./helpers";
+import { login, mockMarketApi } from "./helpers";
 
 test("mobile layout uses the bottom navigation", async ({ page }) => {
-  await mockMarketApi(page);
-  await seedFavorites(page);
+  const api = await mockMarketApi(page);
+  api.seedFavorites();
   await login(page);
 
   await expect(page.getByRole("heading", { name: "Market overview" })).toBeVisible();
@@ -20,8 +20,8 @@ test("mobile layout uses the bottom navigation", async ({ page }) => {
 
 test("dashboard stays within the viewport width", async ({ page }) => {
   await page.setViewportSize({ width: 360, height: 780 });
-  await mockMarketApi(page);
-  await seedFavorites(page);
+  const api = await mockMarketApi(page);
+  api.seedFavorites();
   await login(page);
 
   await expect(page.getByRole("heading", { name: "Market overview" })).toBeVisible();
@@ -45,8 +45,8 @@ test("dashboard stays within the viewport width", async ({ page }) => {
 
 test("sticky chrome survives a long dashboard scroll", async ({ page }) => {
   await page.setViewportSize({ width: 360, height: 640 });
-  await mockMarketApi(page);
-  await seedFavorites(page);
+  const api = await mockMarketApi(page);
+  api.seedFavorites();
   await login(page);
   await expect(page.getByRole("heading", { name: "Market overview" })).toBeVisible();
 

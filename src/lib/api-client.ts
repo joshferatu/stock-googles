@@ -7,13 +7,13 @@ export class ApiError extends Error {
   }
 }
 
-export async function apiGet<T>(path: string, signal?: AbortSignal): Promise<T> {
+async function requestJson<T>(path: string, init: RequestInit & { signal?: AbortSignal }): Promise<T> {
   let response: Response;
   try {
     response = await fetch(path, {
-      signal,
-      headers: { Accept: "application/json" },
       credentials: "same-origin",
+      ...init,
+      headers: { Accept: "application/json", ...(init.headers as Record<string, string> | undefined) },
     });
   } catch (error) {
     if (error instanceof DOMException && error.name === "AbortError") throw error;
@@ -32,4 +32,20 @@ export async function apiGet<T>(path: string, signal?: AbortSignal): Promise<T> 
   }
 
   return (await response.json()) as T;
+}
+
+export function apiGet<T>(path: string, signal?: AbortSignal): Promise<T> {
+  return requestJson<T>(path, { method: "GET", signal });
+}
+
+export function apiSend<T>(
+  path: string,
+  method: "POST" | "PUT",
+  body: unknown,
+): Promise<T> {
+  return requestJson<T>(path, {
+    method,
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(body),
+  });
 }

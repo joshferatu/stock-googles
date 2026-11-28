@@ -18,6 +18,7 @@ import type {
   Quote,
   QuoteType,
 } from "@/lib/types";
+import type { UserStateResponse } from "@/lib/user-state";
 import { formatPrice } from "@/lib/format";
 
 interface QuotesResponse {
@@ -42,7 +43,7 @@ interface SessionResponse {
   authenticated: boolean;
   email: string | null;
   name: string | null;
-  mode: "open" | "password" | "google" | "mock";
+  mode: "open" | "google" | "mock";
   sso: boolean;
 }
 
@@ -57,6 +58,7 @@ export const queryKeys = {
   search: (query: string) => ["search", query] as const,
   profile: (symbol: string) => ["profile", symbol] as const,
   session: ["session"] as const,
+  userState: ["user-state"] as const,
 };
 
 export async function fetchQuotesFor(symbols: string[], signal?: AbortSignal): Promise<QuotesResponse> {
@@ -188,6 +190,25 @@ export function useSessionInfo() {
     queryFn: ({ signal }) => apiGet<SessionResponse>("/api/auth/session", signal),
     staleTime: 5 * 60_000,
     retry: false,
+  });
+}
+
+/**
+ * The signed-in user's favourite/preferences document.
+ *
+ * Never revalidated on its own: the sync layer (`user-state-sync.tsx`) owns
+ * writes and keeps the Zustand stores in step, so a background refetch would
+ * only fight with the optimistic local state.
+ */
+export function useUserState() {
+  return useQuery({
+    queryKey: queryKeys.userState,
+    queryFn: ({ signal }) => apiGet<UserStateResponse>("/api/user/state", signal),
+    staleTime: Infinity,
+    gcTime: Infinity,
+    refetchOnWindowFocus: false,
+    refetchOnReconnect: false,
+    retry: 1,
   });
 }
 

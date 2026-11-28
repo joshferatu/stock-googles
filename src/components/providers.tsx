@@ -45,7 +45,8 @@ export function Providers({ children }: { children: React.ReactNode }) {
         }),
   );
 
-  // Keep favourites in sync across tabs (zustand's persist does not do this by default).
+  // Keep the local favourites cache in sync across tabs (zustand's persist does
+  // not do this by default). The server write follows through `UserStateSync`.
   useEffect(() => {
     const onStorage = (event: StorageEvent) => {
       if (event.key === FAVORITES_STORAGE_KEY) void useFavorites.persist.rehydrate();
@@ -85,7 +86,11 @@ export function Providers({ children }: { children: React.ReactNode }) {
         buster: "v1",
         dehydrateOptions: {
           shouldDehydrateQuery: (query) =>
-            query.state.status === "success" && query.queryKey[0] !== "search",
+            query.state.status === "success" &&
+            query.queryKey[0] !== "search" &&
+            // Per-user state is cached by the Zustand stores, not here: a
+            // restored copy would shadow a newer one saved from another device.
+            query.queryKey[0] !== "user-state",
         },
       }}
     >

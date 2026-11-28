@@ -1,8 +1,8 @@
 import { NextResponse } from "next/server";
 
 /**
- * Public API responses are identical for every user (no per-user data),
- * so they can be cached by the CDN and revalidated in the background.
+ * Market responses are identical for every user, so they can be cached by the
+ * CDN and revalidated in the background. Per-user data must use `jsonNoStore`.
  */
 export function jsonOk(
   data: unknown,
@@ -12,6 +12,13 @@ export function jsonOk(
     headers: {
       "Cache-Control": `public, s-maxage=${sMaxAge}, stale-while-revalidate=${staleWhileRevalidate}`,
     },
+  });
+}
+
+export function jsonNoStore(data: unknown, status = 200) {
+  return NextResponse.json(data, {
+    status,
+    headers: { "Cache-Control": "no-store, must-revalidate" },
   });
 }
 

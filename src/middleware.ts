@@ -1,13 +1,6 @@
 import { NextResponse, type NextRequest } from "next/server";
 
-import {
-  authConfig,
-  GATE_COOKIE,
-  safeNextPath,
-  SESSION_COOKIE,
-  verifyGateToken,
-  verifySessionToken,
-} from "./lib/session";
+import { authConfig, safeNextPath, SESSION_COOKIE, verifySessionToken } from "./lib/session";
 
 function redirect(request: NextRequest, path: string) {
   return NextResponse.redirect(new URL(path, request.url));
@@ -31,37 +24,21 @@ export async function middleware(request: NextRequest) {
     request.cookies.get(SESSION_COOKIE)?.value,
     config.secret,
   );
-  // SSO sessions must carry a verified email; password-only sessions may not.
-  const authenticated = Boolean(session) && (!config.sso || Boolean(session?.email));
-  const gate = await verifyGateToken(request.cookies.get(GATE_COOKIE)?.value, config.secret);
+  const authenticated = Boolean(session?.email);
+  const next = nextQuery(request.nextUrl.searchParams.get("next"));
 
   if (pathname.startsWith("/api/auth/")) return NextResponse.next();
   if (pathname === "/offline" || pathname === "/privacy") return NextResponse.next();
 
   if (pathname === "/login") {
     if (authenticated) return redirect(request, "/");
-    if (config.sso) {
-      // No password stage configured: go straight to Google.
-      if (!config.passwordGate) {
-        return redirect(request, `/login/google${nextQuery(request.nextUrl.searchParams.get("next"))}`);
-      }
-      // Password already accepted: continue to the Google step.
-      if (gate) {
-        return redirect(request, `/login/google${nextQuery(request.nextUrl.searchParams.get("next"))}`);
-      }
-    }
-    return NextResponse.next();
+    // Google SSO is the only gate, so the legacy password URL forwards here.
+    return redirect(request, `/login/google${next}`);
   }
 
   if (pathname === "/login/google") {
-    if (!config.sso) return redirect(request, "/login");
+    if (!config.sso) return redirect(request, "/");
     if (authenticated) return redirect(request, "/");
-    if (config.passwordGate && !gate) {
-      return redirect(
-        request,
-        `/login${nextQuery(request.nextUrl.searchParams.get("next"))}`,
-      );
-    }
     return NextResponse.next();
   }
 
@@ -74,8 +51,7 @@ export async function middleware(request: NextRequest) {
     );
   }
 
-  const next = safeNextPath(`${pathname}${search}`);
-  return redirect(request, `/login${next !== "/" ? `?next=${encodeURIComponent(next)}` : ""}`);
+  return redirect(request, `/login${nextQuery(`${pathname}${search}`)}`);
 }
 
 export const config = {

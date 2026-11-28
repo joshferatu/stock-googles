@@ -3,15 +3,14 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 
 import {
   authConfig,
-  createGateToken,
   createOAuthStateToken,
   createPkcePair,
   createSessionToken,
   isAllowedGoogleEmail,
   randomToken,
+  readCookie,
   safeNextPath,
   timingSafeEqual,
-  verifyGateToken,
   verifyOAuthStateToken,
   verifySessionToken,
 } from "@/lib/session";
@@ -33,10 +32,13 @@ describe("session tokens", () => {
     expect(session?.name).toBe("Alpha Tester");
   });
 
-  it("supports password-only sessions without an email", async () => {
-    const { token } = await createSessionToken(SECRET, { email: null });
-    const session = await verifySessionToken(token, SECRET);
-    expect(session?.email).toBeNull();
+  it("rejects signed tokens without an email (retired password gate)", async () => {
+    const token = await createOAuthStateToken(SECRET, {
+      state: "state-123",
+      verifier: "verifier-456",
+      next: "/",
+    });
+    await expect(verifySessionToken(token, SECRET)).resolves.toBeNull();
   });
 
   it("rejects malformed, tampered, expired and wrong-secret tokens", async () => {
@@ -46,22 +48,11 @@ describe("session tokens", () => {
     await expect(verifySessionToken(`${token}x`, SECRET)).resolves.toBeNull();
     await expect(verifySessionToken(token, "wrong-secret")).resolves.toBeNull();
 
-    const expired = await createSessionToken(SECRET, { email: null }, -60);
+    const expired = await createSessionToken(SECRET, { email: "alpha@gmail.com" }, -60);
     await expect(verifySessionToken(expired.token, SECRET)).resolves.toBeNull();
 
     // Old v1 cookies must not be accepted after the auth change.
     await expect(verifySessionToken("v1.9999999999999.abc", SECRET)).resolves.toBeNull();
-  });
-});
-
-describe("password gate", () => {
-  it("issues and verifies short-lived gate tokens", async () => {
-    const token = await createGateToken(SECRET);
-    await expect(verifyGateToken(token, SECRET)).resolves.toBe(true);
-    await expect(verifyGateToken(token, "wrong-secret")).resolves.toBe(false);
-
-    const expired = await createGateToken(SECRET, -1);
-    await expect(verifyGateToken(expired, SECRET)).resolves.toBe(false);
   });
 });
 
@@ -105,7 +96,6 @@ describe("Google email policy", () => {
 
 describe("authConfig", () => {
   function clearAuthEnv() {
-    delete process.env.AUTH_PASSWORD;
     delete process.env.AUTH_SECRET;
     delete process.env.GOOGLE_CLIENT_ID;
     delete process.env.GOOGLE_CLIENT_SECRET;
@@ -118,39 +108,45 @@ describe("authConfig", () => {
     clearAuthEnv();
     expect(authConfig().mode).toBe("open");
     expect(authConfig().enabled).toBe(false);
+    expect(authConfig().secret).toBe("");
   });
 
-  it("uses password mode when only a password is set", () => {
+  it("has no password mode any more", () => {
     clearAuthEnv();
-    process.env.AUTH_PASSWORD = "pass";
     process.env.AUTH_SECRET = "secret";
+    // A leftover AUTH_PASSWORD must not open a gate.
+    process.env.AUTH_PASSWORD = "pass";
     const config = authConfig();
-    expect(config.mode).toBe("password");
-    expect(config.sso).toBe(false);
-    expect(config.passwordGate).toBe(true);
+    expect(config.mode).toBe("open");
+    expect(config.secret).toBe("secret");
+    delete process.env.AUTH_PASSWORD;
   });
 
-  it("requires Google when credentials are set", () => {
+  it("uses Google when credentials are set", () => {
     clearAuthEnv();
-    process.env.AUTH_PASSWORD = "pass";
-    process.env.AUTH_SECRET = "secret";
     process.env.GOOGLE_CLIENT_ID = "client";
     process.env.GOOGLE_CLIENT_SECRET = "secret";
     const config = authConfig();
     expect(config.mode).toBe("google");
-    expect(config.google.enabled).toBe(true);
+    expect(config.sso).toBe(true);
     expect(config.google.allowedDomain).toBe("gmail.com");
+  });
+
+  it("falls back to the client secret for signing when AUTH_SECRET is unset", () => {
+    clearAuthEnv();
+    process.env.GOOGLE_CLIENT_ID = "client";
+    process.env.GOOGLE_CLIENT_SECRET = "client-secret";
+    expect(authConfig().secret).toBe("stock-googles:client-secret");
   });
 
   it("enables mock SSO locally but never on Vercel production", () => {
     clearAuthEnv();
-    process.env.AUTH_PASSWORD = "pass";
-    process.env.AUTH_SECRET = "secret";
     process.env.GOOGLE_AUTH_MOCK = "1";
     expect(authConfig().mode).toBe("mock");
+    expect(authConfig().secret).toBeTruthy();
 
     vi.stubEnv("VERCEL_ENV", "production");
-    expect(authConfig().mode).toBe("password");
+    expect(authConfig().mode).toBe("open");
   });
 });
 
@@ -162,6 +158,17 @@ describe("safeNextPath", () => {
     expect(safeNextPath("//evil.example")).toBe("/");
     expect(safeNextPath("https://evil.example")).toBe("/");
     expect(safeNextPath("/\\evil.example")).toBe("/");
+  });
+});
+
+describe("readCookie", () => {
+  it("reads a named cookie from a plain Request", () => {
+    const request = new Request("http://localhost/api/user/state", {
+      headers: { cookie: "a=1; sg_session=abc%2Edef; b=2" },
+    });
+    expect(readCookie(request, "sg_session")).toBe("abc.def");
+    expect(readCookie(request, "missing")).toBeUndefined();
+    expect(readCookie(new Request("http://localhost/"), "sg_session")).toBeUndefined();
   });
 });
 

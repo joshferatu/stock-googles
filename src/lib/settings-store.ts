@@ -4,8 +4,9 @@ import { create } from "zustand";
 import { createJSONStorage, persist, type StateStorage } from "zustand/middleware";
 
 import type { DisplayCurrency } from "@/lib/fx";
+import { DEFAULT_PREFERENCES, type Theme, type UserPreferences } from "@/lib/user-state";
 
-export type Theme = "dark" | "light";
+export type { Theme };
 
 export const SETTINGS_STORAGE_KEY = "sg:settings:v1";
 export const THEME_STORAGE_KEY = "sg:theme";
@@ -16,6 +17,8 @@ interface SettingsState {
   setTheme: (theme: Theme) => void;
   toggleTheme: () => void;
   setDisplayCurrency: (currency: DisplayCurrency) => void;
+  /** Applies preferences loaded from the server. */
+  hydratePreferences: (preferences: UserPreferences) => void;
 }
 
 const noopStorage: StateStorage = {
@@ -35,17 +38,26 @@ export function applyTheme(theme: Theme) {
   }
 }
 
+/**
+ * Local cache of display preferences. The database is the source of truth; the
+ * theme is written to <html> immediately so there is no flash of the wrong
+ * palette before the server state arrives.
+ */
 export const useSettings = create<SettingsState>()(
   persist(
     (set, get) => ({
-      theme: "dark",
-      displayCurrency: "native",
+      theme: DEFAULT_PREFERENCES.theme,
+      displayCurrency: DEFAULT_PREFERENCES.displayCurrency,
       setTheme: (theme) => {
         applyTheme(theme);
         set({ theme });
       },
       toggleTheme: () => get().setTheme(get().theme === "dark" ? "light" : "dark"),
       setDisplayCurrency: (displayCurrency) => set({ displayCurrency }),
+      hydratePreferences: (preferences) => {
+        applyTheme(preferences.theme);
+        set({ theme: preferences.theme, displayCurrency: preferences.displayCurrency });
+      },
     }),
     {
       name: SETTINGS_STORAGE_KEY,

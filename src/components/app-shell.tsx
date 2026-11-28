@@ -14,6 +14,7 @@ import { ThemeToggle } from "@/components/theme-toggle";
 import { Button } from "@/components/ui/button";
 import { useFavorites } from "@/lib/favorites-store";
 import { useHydrated } from "@/lib/client-hooks";
+import { UserStateSync } from "@/lib/user-state-sync";
 import { cn } from "@/lib/utils";
 
 const NAV = [
@@ -57,6 +58,8 @@ export function AppShell({ children }: { children: React.ReactNode }) {
 
   return (
     <div className="app-aura relative min-h-dvh">
+      {/* User data is per account: sync it only inside the authenticated shell. */}
+      <UserStateSync />
       <div className="relative z-10 lg:grid lg:min-h-dvh lg:grid-cols-[248px_minmax(0,1fr)]">
         {/* Desktop sidebar */}
         <aside className="sticky top-0 hidden h-dvh flex-col border-r border-border bg-surface/40 px-4 py-5 backdrop-blur-xl lg:flex">

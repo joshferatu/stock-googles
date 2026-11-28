@@ -10,7 +10,6 @@ import {
   authConfig,
   cookieOptions,
   createSessionToken,
-  GATE_COOKIE,
   isAllowedGoogleEmail,
   OAUTH_COOKIE,
   safeNextPath,
@@ -73,7 +72,6 @@ export async function GET(request: NextRequest) {
       new URL(safeNextPath(oauth.next), request.url),
     );
     response.cookies.set(SESSION_COOKIE, token, sessionCookieOptions());
-    response.cookies.set(GATE_COOKIE, "", { ...cookieOptions(0), maxAge: 0 });
     response.cookies.set(OAUTH_COOKIE, "", { ...cookieOptions(0), maxAge: 0 });
     return response;
   } catch (error) {

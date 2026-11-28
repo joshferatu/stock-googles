@@ -19,7 +19,9 @@ export default async function GoogleLoginPage({
   searchParams: Promise<{ next?: string | string[]; error?: string | string[] }>;
 }) {
   const config = authConfig();
-  if (!config.sso) redirect("/login");
+  // No Google credentials and no mock mode: the deployment is open, so there is
+  // nothing to sign in to. Redirecting to `/login` would loop.
+  if (!config.sso) redirect("/");
 
   const params = await searchParams;
   const next = safeNextPath(first(params.next));

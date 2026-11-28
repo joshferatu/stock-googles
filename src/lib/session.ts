@@ -2,32 +2,32 @@
  * Auth primitives: signed tokens, cookies, Google OAuth config and PKCE.
  * Uses Web Crypto only, so it runs in middleware (edge) and Node routes.
  *
- * Flow: signed password gate -> Google identity -> full session.
- * Tokens are `base64url(JSON).base64url(HMAC-SHA256)`, so old `v1.*` cookies
- * invalidate automatically.
+ * Flow: Google identity (authorization code + PKCE) -> full session.
+ * Tokens are `base64url(JSON).base64url(HMAC-SHA256)`, so old cookies
+ * invalidate automatically. Google SSO is the only way in.
  */
 
 export const SESSION_COOKIE = "sg_session";
-export const GATE_COOKIE = "sg_gate";
 export const OAUTH_COOKIE = "sg_oauth";
 
 export const SESSION_MAX_AGE_SECONDS = 60 * 60 * 24 * 30; // 30 days
-export const GATE_MAX_AGE_SECONDS = 60 * 15; // 15 minutes
 export const OAUTH_MAX_AGE_SECONDS = 60 * 10; // 10 minutes
+
+/**
+ * Local/E2E signing key for mock mode, used only when both `AUTH_SECRET` and
+ * the Google client secret are absent. Mock mode is impossible on Vercel
+ * production, so this value never signs a real session.
+ */
+const MOCK_SECRET = "stock-googles:local-mock";
 
 const encoder = new TextEncoder();
 
-export type AuthMode = "open" | "password" | "google" | "mock";
+export type AuthMode = "open" | "google" | "mock";
 
 export interface SessionData {
-  /** Verified Google email, or null for password-only sessions. */
-  email: string | null;
+  /** Google-verified email. Every session carries one. */
+  email: string;
   name?: string | null;
-  exp: number;
-}
-
-interface GateData {
-  stage: "gate";
   exp: number;
 }
 
@@ -62,27 +62,33 @@ export function googleAuthConfig(): GoogleAuthSettings {
 }
 
 export function authConfig() {
-  const password = process.env.AUTH_PASSWORD?.trim() ?? "";
-  const secret = process.env.AUTH_SECRET?.trim() || (password ? `stock-googles:${password}` : "");
   const google = googleAuthConfig();
-  const mode: AuthMode = google.enabled
-    ? "google"
-    : google.mock
-      ? "mock"
-      : password
-        ? "password"
-        : "open";
+  const mode: AuthMode = google.enabled ? "google" : google.mock ? "mock" : "open";
+  const sso = google.enabled || google.mock;
+  const secret =
+    process.env.AUTH_SECRET?.trim() ||
+    (google.clientSecret ? `stock-googles:${google.clientSecret}` : "") ||
+    (sso ? MOCK_SECRET : "");
 
-  return {
-    enabled: mode !== "open",
-    password,
-    secret,
-    google,
-    mode,
-    /** Whether the first (password) stage is available. */
-    passwordGate: password.length > 0,
-    sso: google.enabled || google.mock,
-  };
+  return { enabled: mode !== "open", secret, google, mode, sso };
+}
+
+/** Reads a cookie from a plain `Request` (route handlers and unit tests). */
+export function readCookie(request: Request, name: string): string | undefined {
+  const header = request.headers.get("cookie");
+  if (!header) return undefined;
+  for (const part of header.split(";")) {
+    const separator = part.indexOf("=");
+    if (separator < 0) continue;
+    if (part.slice(0, separator).trim() !== name) continue;
+    const value = part.slice(separator + 1).trim();
+    try {
+      return decodeURIComponent(value);
+    } catch {
+      return value;
+    }
+  }
+  return undefined;
 }
 
 function base64UrlEncode(bytes: Uint8Array): string {
@@ -155,7 +161,7 @@ async function verifyPayload<T extends { exp: number }>(
 
 export async function createSessionToken(
   secret: string,
-  data: { email: string | null; name?: string | null },
+  data: { email: string; name?: string | null },
   ttlSeconds = SESSION_MAX_AGE_SECONDS,
 ): Promise<{ token: string; expiresAt: number }> {
   const expiresAt = Date.now() + ttlSeconds * 1000;
@@ -172,20 +178,9 @@ export async function verifySessionToken(
 ): Promise<SessionData | null> {
   const payload = await verifyPayload<SessionData>(token, secret);
   if (!payload) return null;
-  if (payload.email !== null && typeof payload.email !== "string") return null;
+  // Sessions without an email (the retired password gate) are not identities.
+  if (typeof payload.email !== "string" || !payload.email.trim()) return null;
   return payload;
-}
-
-export async function createGateToken(
-  secret: string,
-  ttlSeconds = GATE_MAX_AGE_SECONDS,
-): Promise<string> {
-  return signPayload({ exp: Date.now() + ttlSeconds * 1000, stage: "gate" } satisfies GateData, secret);
-}
-
-export async function verifyGateToken(token: string | undefined, secret: string): Promise<boolean> {
-  const payload = await verifyPayload<GateData>(token, secret);
-  return Boolean(payload && payload.stage === "gate");
 }
 
 export async function createOAuthStateToken(

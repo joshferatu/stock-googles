@@ -1,8 +1,14 @@
 import type { Page, Route } from "@playwright/test";
 
+import type { Favorite, UserState } from "../../src/lib/user-state";
+
 /**
  * Deterministic market data for end-to-end tests.
- * The auth endpoints are left to the real dev server so login is exercised for real.
+ *
+ * Auth endpoints run on the real server so the Google mock login is exercised
+ * for real; market data and `/api/user/state` are intercepted. The user-state
+ * mock is an in-memory row, which keeps the suite database-free while still
+ * proving that favourites come from the server rather than the browser.
  */
 
 const NOW = Math.floor(Date.now() / 1000);
@@ -271,14 +277,69 @@ async function fulfillJson(route: Route, body: unknown, status = 200) {
   });
 }
 
-export async function mockMarketApi(page: Page, options: { chartDelayMs?: number } = {}) {
+const EMPTY_USER_STATE: UserState = {
+  favorites: [],
+  preferences: { theme: "dark", displayCurrency: "native" },
+  recentSearches: [],
+};
+
+export const DEFAULT_FAVORITES: Favorite[] = [
+  {
+    symbol: "AAPL",
+    name: "Apple Inc.",
+    exchange: "NASDAQ",
+    quoteType: "EQUITY",
+    addedAt: NOW * 1000 - 5000,
+  },
+  {
+    symbol: "MSFT",
+    name: "Microsoft Corporation",
+    exchange: "NASDAQ",
+    quoteType: "EQUITY",
+    addedAt: NOW * 1000 - 4000,
+  },
+];
+
+export interface ApiMock {
+  /** Replaces the account's stored document (simulates an existing DB row). */
+  seedUserState: (state: Partial<UserState>) => void;
+  /** Convenience: a watchlist with Apple and Microsoft. */
+  seedFavorites: () => void;
+  /** Current server-side document, for assertions after a debounced write. */
+  userState: () => UserState;
+}
+
+export async function mockMarketApi(
+  page: Page,
+  options: { chartDelayMs?: number } = {},
+): Promise<ApiMock> {
+  const userState: UserState = structuredClone(EMPTY_USER_STATE);
+  let hasRow = false;
+
   await page.route("**/api/**", async (route) => {
     const url = new URL(route.request().url());
     const path = url.pathname;
 
-    // Let the real auth endpoints run (password, mock Google, session, logout).
+    // Let the real auth endpoints run (mock Google, session, logout).
     if (path.startsWith("/api/auth/")) {
       return route.fallback();
+    }
+
+    // In-memory stand-in for the Neon `user_state` row.
+    if (path === "/api/user/state") {
+      if (route.request().method() === "PUT") {
+        const body = (JSON.parse(route.request().postData() ?? "{}") ?? {}) as Partial<UserState>;
+        userState.favorites = body.favorites ?? [];
+        userState.preferences = body.preferences ?? EMPTY_USER_STATE.preferences;
+        userState.recentSearches = body.recentSearches ?? [];
+        hasRow = true;
+      }
+      return fulfillJson(route, {
+        exists: hasRow,
+        updatedAt: hasRow ? new Date().toISOString() : null,
+        ...(route.request().method() === "PUT" ? { ok: true } : {}),
+        state: userState,
+      });
     }
 
     if (path === "/api/quotes") {
@@ -339,32 +400,24 @@ export async function mockMarketApi(page: Page, options: { chartDelayMs?: number
 
     return fulfillJson(route, { error: "not mocked" }, 404);
   });
+
+  return {
+    seedUserState: (state) => {
+      Object.assign(userState, state);
+      hasRow = true;
+    },
+    seedFavorites: () => {
+      userState.favorites = structuredClone(DEFAULT_FAVORITES);
+      hasRow = true;
+    },
+    userState: () => userState,
+  };
 }
 
+/** Completes the only gate: Google sign-in (mocked locally/E2E). */
 export async function login(page: Page, email = "alpha@gmail.com") {
-  await page.goto("/login");
-  await page.getByLabel("Shared password").fill("test-pass");
-  await page.getByRole("button", { name: "Continue" }).click();
-  await page.waitForURL((url) => url.pathname === "/login/google", { timeout: 45_000 });
+  await page.goto("/login/google");
   await page.getByLabel("Google email").fill(email);
   await page.getByRole("button", { name: "Continue with Google" }).click();
   await page.waitForURL((url) => url.pathname === "/", { timeout: 45_000 });
-}
-
-export const FAVORITES_SEED = {
-  state: {
-    favorites: [
-      { symbol: "AAPL", name: "Apple Inc.", exchange: "NASDAQ", quoteType: "EQUITY", addedAt: NOW * 1000 - 5000 },
-      { symbol: "MSFT", name: "Microsoft Corporation", exchange: "NASDAQ", quoteType: "EQUITY", addedAt: NOW * 1000 - 4000 },
-    ],
-  },
-  version: 1,
-};
-
-export async function seedFavorites(page: Page) {
-  await page.addInitScript((payload) => {
-    if (!window.localStorage.getItem("sg:favorites:v1")) {
-      window.localStorage.setItem("sg:favorites:v1", payload);
-    }
-  }, JSON.stringify(FAVORITES_SEED));
 }
