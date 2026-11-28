@@ -27,6 +27,7 @@ A fast, installable market dashboard for a handful of people. Search any listed 
 | Charts | TradingView `lightweight-charts` v5 | Canvas performance and a native finance feel. |
 | State | Zustand (favourites, settings, toasts) | Tiny, hydrated synchronously from `localStorage` as a cache of the database. |
 | Database | Neon Postgres via `@neondatabase/serverless` | Per-user favourites, preferences and recent searches; HTTP driver, no TCP pool to exhaust. |
+| Shared cache | Upstash Redis via `@upstash/redis` | Market payloads shared by every instance and user; the last good copy survives a provider outage for 24 h. Optional: without credentials it degrades to in-process caching. |
 | Validation | Zod | Route input validation. |
 | Market data | Yahoo Finance, Jina reader proxy, StockAnalysis, TradingView, CNBC, Nasdaq, Google News RSS, open.er-api.com | All keyless. See [Data sources](#data-sources). |
 | Tests | Vitest + Testing Library, Playwright | Unit/adapter coverage and browser smoke tests with mocked APIs. |
