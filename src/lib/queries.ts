@@ -24,18 +24,32 @@ import { formatPrice } from "@/lib/format";
 interface QuotesResponse {
   quotes: Quote[];
   fetchedAt: number;
+  stale?: boolean;
 }
 
 interface NewsResponse {
   items: NewsItem[];
   symbols: string[];
   fetchedAt: number;
+  stale?: boolean;
 }
 
 interface SearchResponse {
   query: string;
   results: Instrument[];
   fetchedAt: number;
+  stale?: boolean;
+}
+
+/**
+ * A quote as it is cached on the client: the payload's fetch metadata travels
+ * with it so detail pages can show how old the price really is.
+ */
+export interface CachedQuote extends Quote {
+  /** Epoch ms when the server fetched this quote from the provider. */
+  fetchedAt?: number;
+  /** True when the server served its stale fallback copy. */
+  stale?: boolean;
 }
 
 interface SessionResponse {
@@ -75,7 +89,13 @@ export function useQuotes(symbols: readonly string[]) {
     queryFn: async ({ signal }) => {
       const data = await fetchQuotesFor(key.split(","), signal);
       // Write-through per-symbol entries so detail pages and hover prefetches reuse them.
-      for (const quote of data.quotes) queryClient.setQueryData(queryKeys.quote(quote.symbol), quote);
+      for (const quote of data.quotes) {
+        queryClient.setQueryData(queryKeys.quote(quote.symbol), {
+          ...quote,
+          fetchedAt: data.fetchedAt,
+          stale: data.stale,
+        } satisfies CachedQuote);
+      }
       return data;
     },
     enabled: key.length > 0,
@@ -89,9 +109,10 @@ export function useQuotes(symbols: readonly string[]) {
 export function useQuote(symbol: string) {
   return useQuery({
     queryKey: queryKeys.quote(symbol),
-    queryFn: async ({ signal }) => {
+    queryFn: async ({ signal }): Promise<CachedQuote | null> => {
       const data = await fetchQuotesFor([symbol], signal);
-      return data.quotes[0] ?? null;
+      const quote = data.quotes[0];
+      return quote ? { ...quote, fetchedAt: data.fetchedAt, stale: data.stale } : null;
     },
     enabled: Boolean(symbol),
     staleTime: 30_000,

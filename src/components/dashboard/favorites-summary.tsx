@@ -76,7 +76,7 @@ export function FavoritesSummary() {
           favorites.length > 0 ? (
             <div className="flex items-center gap-2">
               <span className="hidden sm:inline-flex">
-                <UpdatedAgo timestamp={query.data?.fetchedAt} />
+                <UpdatedAgo timestamp={query.data?.fetchedAt} stale={Boolean(query.data?.stale)} />
               </span>
               <Link
                 href="/favorites"

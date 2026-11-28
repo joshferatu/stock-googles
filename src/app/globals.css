@@ -15,6 +15,7 @@
   --up: #059669;
   --down: #dc2626;
   --ring: rgba(13, 148, 136, 0.45);
+  --warn: #b45309;
   --glow-a: rgba(16, 185, 129, 0.12);
   --glow-b: rgba(14, 165, 233, 0.08);
   --chart-grid: #e8ebef;
@@ -33,6 +34,7 @@
   --up: #34d399;
   --down: #fb7185;
   --ring: rgba(45, 212, 191, 0.5);
+  --warn: #fbbf24;
   --glow-a: rgba(45, 212, 191, 0.09);
   --glow-b: rgba(56, 189, 248, 0.05);
   --chart-grid: rgba(255, 255, 255, 0.05);
@@ -50,6 +52,7 @@
   --color-accent-2: var(--accent-2);
   --color-up: var(--up);
   --color-down: var(--down);
+  --color-warn: var(--warn);
   --font-sans: var(--font-geist-sans);
   --font-mono: var(--font-geist-mono);
 }

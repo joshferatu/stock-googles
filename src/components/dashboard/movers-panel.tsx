@@ -82,7 +82,7 @@ export function MoversPanel() {
       </div>
 
       <div className="mt-3 flex items-center justify-between gap-2 border-t border-border/60 pt-2.5">
-        <UpdatedAgo timestamp={data?.asOf ? data.asOf * 1000 : undefined} />
+        <UpdatedAgo timestamp={data?.asOf ? data.asOf * 1000 : undefined} stale={Boolean(data?.stale)} />
         <span className="text-[10px] text-muted">
           {data ? `${data.universe} stocks scanned${data.partial ? " · partial" : ""}` : "Global universe"}
         </span>

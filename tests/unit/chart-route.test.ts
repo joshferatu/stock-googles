@@ -11,6 +11,7 @@ vi.mock("@/lib/stockanalysis", () => ({
 }));
 
 import { GET } from "@/app/api/chart/route";
+import { clearMemoCache } from "@/lib/cache";
 import { fetchStockAnalysisChart } from "@/lib/stockanalysis";
 import type { ChartPayload } from "@/lib/types";
 import { fetchChart } from "@/lib/yahoo";
@@ -45,6 +46,7 @@ function request() {
 
 describe("GET /api/chart", () => {
   beforeEach(() => {
+    clearMemoCache();
     vi.clearAllMocks();
   });
 
@@ -65,6 +67,26 @@ describe("GET /api/chart", () => {
       source: "stockanalysis",
       note: "Daily closes",
     });
+  });
+
+  it("serves the last cached series flagged stale when both providers fail", async () => {
+    vi.useFakeTimers({ toFake: ["Date"] });
+    vi.setSystemTime(new Date("2025-01-02T14:00:00Z"));
+    try {
+      vi.mocked(fetchChart).mockResolvedValue(yahooChart);
+      const first = await GET(request());
+      expect(await first.json()).toMatchObject({ stale: false, source: "yahoo" });
+
+      vi.setSystemTime(new Date("2025-01-02T14:10:00Z"));
+      vi.mocked(fetchChart).mockRejectedValue(new Error("Yahoo throttled"));
+      vi.mocked(fetchStockAnalysisChart).mockRejectedValue(new Error("No fallback"));
+
+      const second = await GET(request());
+      expect(second.status).toBe(200);
+      expect(await second.json()).toMatchObject({ stale: true, source: "yahoo", series: yahooChart.series });
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it("returns the original provider status when both fail", async () => {

@@ -1,3 +1,4 @@
+import { cached } from "@/lib/cache";
 import { jsonError, jsonOk, providerErrorMessage } from "@/lib/http";
 import { parseRange, RANGES, type RangeId } from "@/lib/ranges";
 import { fetchStockAnalysisChart } from "@/lib/stockanalysis";
@@ -15,17 +16,26 @@ export async function GET(request: Request) {
 
   if (!symbol || !isValidSymbol(symbol)) return jsonError("Invalid symbol.", 400);
 
-  let chart: ChartPayload;
-  try {
-    chart = await fetchChart(symbol, range);
-  } catch (primaryError) {
+  const load = async (): Promise<ChartPayload> => {
     try {
-      chart = await fetchStockAnalysisChart(symbol, range);
-    } catch {
-      const { message, status } = providerErrorMessage(primaryError);
-      return jsonError(message, status);
+      return await fetchChart(symbol, range);
+    } catch (primaryError) {
+      try {
+        return await fetchStockAnalysisChart(symbol, range);
+      } catch {
+        throw primaryError;
+      }
     }
-  }
+  };
 
-  return jsonOk(chart, { sMaxAge: RANGES[range].ttl, staleWhileRevalidate: 600 });
+  try {
+    const { value, meta } = await cached<ChartPayload>(`chart:${symbol}:${range}`, {
+      ttlMs: RANGES[range].ttl * 1000,
+    }, load);
+
+    return jsonOk({ ...value, stale: meta.stale }, { sMaxAge: RANGES[range].ttl, staleWhileRevalidate: 600 });
+  } catch (error) {
+    const { message, status } = providerErrorMessage(error);
+    return jsonError(message, status);
+  }
 }

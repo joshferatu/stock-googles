@@ -71,7 +71,8 @@ src/lib/
   nasdaq.ts               US search fallback
   google-news.ts          RSS news fallback
   symbols.ts              canonical (Yahoo-style) ↔ provider symbol mapping
-  cache.ts                in-process TTL cache, in-flight coalescing, stale-on-error
+  cache.ts                two-layer TTL cache (memory + Redis), coalescing, stale-on-error
+  redis.ts                optional Upstash Redis client; disables itself when unset/failing
   types.ts                normalised domain types shared by server and client
   queries.ts              TanStack Query hooks, query keys, currency formatting, prefetch
   db.ts                   lazy Neon HTTP client
@@ -142,9 +143,13 @@ Rules:
 ## Caching layers
 
 1. Browser: TanStack Query persists successful *market* queries to `localStorage` for 24 h (`Providers`), except `search` and `user-state`. User state is cached by the Zustand stores instead. Assets are cache-first in the service worker.
-2. Server memory: `memoize(key, ttl, loader)` in `src/lib/cache.ts`; deduplicates concurrent loads and serves stale values for up to 6 h on failure. Never memoize per-user data — the key space is unbounded and it would leak across users.
-3. CDN: route `Cache-Control` via `jsonOk` (`s-maxage`, `stale-while-revalidate`). Keep TTLs aligned with `src/lib/ranges.ts` and the route.
-4. Service worker: static/navigation only. **API responses are intentionally not cached** because auth must stay live; browser query persistence covers offline reads.
+2. Shared Redis (Upstash, from the Vercel Marketplace): `cached(key, { ttlMs, staleMs }, loader)` in `src/lib/cache.ts` wraps every market route. It reads L1, then Redis, then the providers, and serves the last good payload for up to `staleMs` (24 h) when the providers fail, flagged `stale: true` so the UI can say "Cached · 3h ago". Payload timestamps (`fetchedAt`/`asOf`) come from `meta.storedAt`, never `Date.now()` at response time.
+   - Keys are namespaced `sg:v1:`; bump `KEY_PREFIX` when a payload shape changes.
+   - `KV_REST_API_URL`/`KV_REST_API_TOKEN` (or `UPSTASH_REDIS_REST_*`) are optional: without them, or when Upstash errors, everything degrades to L1 and nothing fails. Local dev and E2E run without Redis.
+   - Never use the shared cache for per-user data — the key space is unbounded and it would leak across users. `shared: false` keys stay in-process.
+3. Server memory (L1): `memoize(key, ttl, loader)` keeps provider helpers cheap per function instance and coalesces concurrent loads. It never talks to Redis; the shared layer lives at the route.
+4. CDN: route `Cache-Control` via `jsonOk` (`s-maxage`, `stale-while-revalidate`). Keep TTLs aligned with `src/lib/ranges.ts` and the route.
+5. Service worker: static/navigation only. **API responses are intentionally not cached** because auth must stay live; browser query persistence covers offline reads.
 
 ## Auth (Private Alpha, Google only)
 
@@ -211,7 +216,8 @@ Rules:
 - Hardcode provider keys, secrets or connection strings.
 - Log `DATABASE_URL`, cookies or OAuth tokens.
 - Commit `.env.local`, `.next`, `test-results`, `node_modules`.
-- Bypass `memoize`/CDN caching to "make data fresher"; free providers will throttle.
+- Bypass `cached`/`memoize`/CDN caching to "make data fresher"; free providers will throttle.
+- Make market routes depend on Redis: a missing or failing Upstash must only ever cost cache hits.
 - Introduce a second styling system or rewrite the design tokens ad hoc.
 
 ## Deployment

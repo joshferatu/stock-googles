@@ -126,7 +126,7 @@ export function FavoritesView() {
               <Segmented options={SORTS} value={sort} onChange={setSort} size="sm" ariaLabel="Sort favourites" />
             </div>
             <div className="flex items-center gap-2">
-              <UpdatedAgo timestamp={data?.fetchedAt} />
+              <UpdatedAgo timestamp={data?.fetchedAt} stale={Boolean(data?.stale)} />
               <Button
                 size="sm"
                 variant="outline"

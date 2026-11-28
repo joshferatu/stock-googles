@@ -63,6 +63,8 @@ export interface ChartPayload {
   source: ChartSource;
   /** Human-readable warning when the data is degraded (e.g. daily fallback). */
   note?: string;
+  /** True when the providers failed and this is the last cached copy. */
+  stale?: boolean;
   series: ChartPoint[];
 }
 
@@ -83,11 +85,15 @@ export interface MoversPayload {
   asOf: number;
   universe: number;
   partial: boolean;
+  /** True when the providers failed and this is the last cached copy. */
+  stale?: boolean;
 }
 
 export interface MarketsPayload {
   indices: Quote[];
   asOf: number;
+  /** True when the providers failed and this is the last cached copy. */
+  stale?: boolean;
 }
 
 export interface FxPayload {
@@ -96,6 +102,8 @@ export interface FxPayload {
   asOf: string;
   /** Currencies that could not be resolved by any provider. */
   missing: string[];
+  /** True when the providers failed and this is the last cached copy. */
+  stale?: boolean;
 }
 
 export interface ApiError {

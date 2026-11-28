@@ -18,6 +18,7 @@ vi.mock("@/lib/nasdaq", () => ({
 }));
 
 import { GET } from "@/app/api/search/route";
+import { clearMemoCache } from "@/lib/cache";
 import { searchNasdaq } from "@/lib/nasdaq";
 import { searchStockAnalysis } from "@/lib/stockanalysis";
 import { searchTradingView } from "@/lib/tradingview";
@@ -50,6 +51,7 @@ function request(q = "apple") {
 
 describe("GET /api/search provider chain", () => {
   beforeEach(() => {
+    clearMemoCache();
     vi.clearAllMocks();
     vi.mocked(searchInstruments).mockResolvedValue([]);
     vi.mocked(searchStockAnalysis).mockResolvedValue([]);
@@ -82,6 +84,8 @@ describe("GET /api/search provider chain", () => {
 
     vi.mocked(searchTradingView).mockResolvedValue([]);
     vi.mocked(searchNasdaq).mockResolvedValue([apple]);
+    // Same query, new response: drop the route cache so the chain runs again.
+    clearMemoCache();
     const nasdaq = await GET(request());
     expect(await nasdaq.json()).toMatchObject({ provider: "nasdaq" });
   });

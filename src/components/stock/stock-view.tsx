@@ -138,7 +138,11 @@ export function StockView({ symbol }: { symbol: string }) {
                   {quote.timezone ? ` · ${quote.timezone.replace(/_/g, " ")}` : ""}
                 </span>
               ) : null}
-              <UpdatedAgo timestamp={quoteQuery.dataUpdatedAt} prefix="Fetched" />
+              <UpdatedAgo
+                timestamp={quoteQuery.data?.fetchedAt ?? quoteQuery.dataUpdatedAt}
+                stale={Boolean(quoteQuery.data?.stale)}
+                prefix="Fetched"
+              />
             </div>
             <ConvertedHint quote={quote} />
           </div>
